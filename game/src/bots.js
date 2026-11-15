@@ -495,6 +495,10 @@ export function createBots(scene, world, G) {
         }
       } else if (!atGoal && round.phase === 'live') moveAlongPath(bot, dt, time);
       else bot.moving = false;
+      // A bot that is not moving must stand still: the physics body keeps its last
+      // wish velocity until step() runs again, so without this the speed checks
+      // for planting and defusing (speed < 0.5 m/s) could never pass for a bot.
+      if (!bot.moving) bot.mover.step(dt, 0, 0, false);
       // Bomb pickup by walking over it.
       if (bomb.status === 'dropped' && bot.team === 'attackers') {
         if (flatDistance(bot.body.position, bomb.position) < 1.2) {

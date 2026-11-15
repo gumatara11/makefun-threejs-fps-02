@@ -437,7 +437,8 @@ function handlePressed(pressed) {
 // --- Autopilot (test only: ?auto=1) -------------------------------------------
 const autoRay = new THREE.Raycaster();
 let autoPath = [];
-let autoPathTime = -10;
+let autoGoalX = null;
+let autoGoalZ = null;
 function autoStep(dt) {
   const state = rounds.state;
   if (state.phase === 'buy') {
@@ -471,6 +472,16 @@ function autoStep(dt) {
     }
   }
   if (best) {
+    // Planting beats shooting: carrying the bomb in a plant zone, hold still and
+    // plant instead of trading shots at a far target.
+    if (playerActor.hasBomb && rounds.inPlantZone(playerActor, 'A')) {
+      autoFiring = false;
+      autoHoldingE = true;
+      // Stand still (friction through player.step) so speed drops below the
+      // 0.5 m/s plant gate; returning without stepping would freeze velocity.
+      player.step(dt, new Set());
+      return;
+    }
     const dx = best.body.position.x - player.state.position.x;
     const dz = best.body.position.z - player.state.position.z;
     const dy = best.body.position.y + 1.05 - (player.state.position.y + player.state.eye);
@@ -482,6 +493,13 @@ function autoStep(dt) {
     return;
   }
   autoFiring = false;
+  // Planting beats moving: carrying the bomb in a plant zone, hold still and
+  // plant instead of jittering around the goal node (speed spikes reset plant).
+  if (playerActor.hasBomb && rounds.inPlantZone(playerActor, 'A')) {
+    autoHoldingE = true;
+    player.step(dt, new Set());
+    return;
+  }
   // Play the objective: fetch a dropped bomb, plant with the bomb, otherwise hunt.
   let tx;
   let tz;
@@ -506,11 +524,22 @@ function autoStep(dt) {
     tx = nearest.body.position.x;
     tz = nearest.body.position.z;
   }
-  if (clockTime - autoPathTime > 1.0 || autoPath.length === 0) {
+  // Replan only when the goal moved or the path ran out: replanning every second
+  // snaps the start back to the node behind and the player walks back and forth.
+  if (autoPath.length === 0 || autoGoalX === null || Math.hypot(tx - autoGoalX, tz - autoGoalZ) > 3) {
     const start = nearestNode(world.nodes, player.state.position.x, player.state.position.z);
     const goal = nearestNode(world.nodes, tx, tz);
     autoPath = findPath(world.nodes, world.edges, start, goal);
-    autoPathTime = clockTime;
+    autoGoalX = tx;
+    autoGoalZ = tz;
+    // Skip the first node when the next one is already closer (we are past it).
+    if (autoPath.length > 1) {
+      const first = world.nodes[autoPath[0]];
+      const second = world.nodes[autoPath[1]];
+      const dFirst = Math.hypot(first.x - player.state.position.x, first.z - player.state.position.z);
+      const dSecond = Math.hypot(second.x - player.state.position.x, second.z - player.state.position.z);
+      if (dSecond < dFirst) autoPath.shift();
+    }
   }
   const node = autoPath.length > 0 ? world.nodes[autoPath[0]] : { x: tx, z: tz };
   const dx = node.x - player.state.position.x;
@@ -801,6 +830,33 @@ window.__DUSTLINE__ = {
   },
   setPhase(phase) {
     rounds.state.phase = phase;
+  },
+  // Test-only: hand the bomb to the player (as if the carrier had dropped it).
+  debugGiveBomb() {
+    const bomb = rounds.state.bomb;
+    if (bomb.carrier && bomb.carrier !== playerActor) bomb.carrier.hasBomb = false;
+    playerActor.hasBomb = true;
+    bomb.status = 'carried';
+    bomb.carrier = playerActor;
+    G.onBombPickup(playerActor);
+  },
+  // Test-only: resume the fixed-step simulation (shot poses freeze it).
+  resume() {
+    started = true;
+    simRunning = true;
+  },
+  // Test-only: live internals for diagnosing plant/defuse behavior.
+  get debugState() {
+    return {
+      autoHoldingE,
+      autoFiring,
+      plantProgress: rounds.state.plant ? rounds.state.plant.progress : null,
+      carrier: rounds.state.bomb.carrier ? rounds.state.bomb.carrier.id : null,
+      bombStatus: rounds.state.bomb.status,
+      playerSpeed: Math.hypot(player.state.velocity.x, player.state.velocity.z),
+      inZoneA: rounds.inPlantZone(playerActor, 'A'),
+      phase: rounds.state.phase,
+    };
   },
 };
 
