@@ -10,12 +10,18 @@ function buildViewModel(def) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.canvas), roughness: 0.7, metalness: 0.2 });
   const body = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.5, metalness: 0.35 });
   // Gloved first-person hands (light gloves, PALETTE.ink). Parented to the weapon
-  // model, so they follow it exactly through recoil kick and the reload dip —
-  // visual only, no gameplay, combat, or input code is touched.
+  // model, so they follow it exactly through recoil kick, the reload dip, and
+  // weapon switches — visual only, no gameplay, combat, or input code is touched.
+  // The hands are deliberately chunky and oversized vs the gun (classic FPS
+  // viewmodel style): palm wider than the grip, knuckle bars protruding on both
+  // sides, thumb on the camera side, and a wrist/forearm entering from the
+  // bottom of the screen, so they read as hands at a glance, not as gun parts.
   const glove = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.9, metalness: 0.05 });
-  function hand(w, h, d, x, y, z) {
+  function hand(w, h, d, x, y, z, rx = 0, rz = 0) {
     const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glove);
     m.position.set(x, y, z);
+    m.rotation.x = rx;
+    m.rotation.z = rz;
     return m;
   }
   const model = new THREE.Group();
@@ -24,11 +30,20 @@ function buildViewModel(def) {
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.08), grip);
     handle.position.set(0, -0.08, 0.08);
     model.add(slide, handle);
-    // Right hand wrapped around the pistol grip.
+    // Right hand wrapped around the pistol grip + forearm from below.
     model.add(
-      hand(0.075, 0.1, 0.095, 0, -0.08, 0.08),
-      hand(0.07, 0.028, 0.028, 0, -0.055, 0.032),
-      hand(0.02, 0.05, 0.03, 0.042, -0.075, 0.06),
+      hand(0.10, 0.12, 0.12, 0, -0.08, 0.08),
+      hand(0.11, 0.04, 0.035, 0, -0.045, 0.025),
+      hand(0.03, 0.08, 0.045, 0.055, -0.06, 0.06),
+      hand(0.075, 0.08, 0.22, 0.01, -0.17, 0.20, 0.55, 0),
+    );
+    // Left support hand cupping under the grip, shifted FORWARD so it reads as a
+    // second hand in front of the right hand (not stacked under it), its forearm
+    // angled down-left so the two forearms diverge into a V.
+    model.add(
+      hand(0.095, 0.07, 0.11, 0, -0.16, -0.02),
+      hand(0.10, 0.035, 0.03, 0, -0.135, -0.06),
+      hand(0.07, 0.07, 0.20, -0.09, -0.21, 0.10, 0.55, 0.5),
     );
   } else {
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.42), body);
@@ -40,12 +55,19 @@ function buildViewModel(def) {
     mag.position.set(0, -0.1, -0.05);
     mag.rotation.x = 0.2;
     model.add(receiver, barrel, stock, mag);
-    // Right hand on the stock grip, left hand on the foregrip.
+    // Right hand on the stock grip + forearm from below.
     model.add(
-      hand(0.085, 0.09, 0.1, 0, -0.02, 0.28),
-      hand(0.08, 0.028, 0.028, 0, 0.0, 0.24),
-      hand(0.08, 0.07, 0.09, 0, -0.01, -0.32),
-      hand(0.075, 0.028, 0.028, 0, -0.045, -0.32),
+      hand(0.105, 0.11, 0.13, 0, -0.02, 0.28),
+      hand(0.11, 0.04, 0.035, 0, 0.01, 0.235),
+      hand(0.03, 0.08, 0.045, 0.055, -0.01, 0.26),
+      hand(0.075, 0.08, 0.22, 0.01, -0.11, 0.42, 0.55, 0),
+    );
+    // Left hand on the foregrip: palm under the barrel, knuckles over the top.
+    model.add(
+      hand(0.10, 0.08, 0.12, 0, -0.03, -0.32),
+      hand(0.105, 0.035, 0.03, 0, 0.055, -0.32),
+      hand(0.03, 0.06, 0.04, 0.05, -0.01, -0.30),
+      hand(0.07, 0.07, 0.20, -0.05, -0.10, -0.16, 0.55, 0.2),
     );
   }
   model.position.set(0.3, -0.26, -0.7);
