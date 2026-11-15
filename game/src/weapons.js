@@ -9,12 +9,27 @@ import { WEAPONS } from './config.js';
 function buildViewModel(def) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.canvas), roughness: 0.7, metalness: 0.2 });
   const body = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.5, metalness: 0.35 });
+  // Gloved first-person hands (light gloves, PALETTE.ink). Parented to the weapon
+  // model, so they follow it exactly through recoil kick and the reload dip —
+  // visual only, no gameplay, combat, or input code is touched.
+  const glove = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.9, metalness: 0.05 });
+  function hand(w, h, d, x, y, z) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glove);
+    m.position.set(x, y, z);
+    return m;
+  }
   const model = new THREE.Group();
   if (def.name === 'P9') {
     const slide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.26), body);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.08), grip);
     handle.position.set(0, -0.08, 0.08);
     model.add(slide, handle);
+    // Right hand wrapped around the pistol grip.
+    model.add(
+      hand(0.075, 0.1, 0.095, 0, -0.08, 0.08),
+      hand(0.07, 0.028, 0.028, 0, -0.055, 0.032),
+      hand(0.02, 0.05, 0.03, 0.042, -0.075, 0.06),
+    );
   } else {
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.42), body);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.4), grip);
@@ -25,6 +40,13 @@ function buildViewModel(def) {
     mag.position.set(0, -0.1, -0.05);
     mag.rotation.x = 0.2;
     model.add(receiver, barrel, stock, mag);
+    // Right hand on the stock grip, left hand on the foregrip.
+    model.add(
+      hand(0.085, 0.09, 0.1, 0, -0.02, 0.28),
+      hand(0.08, 0.028, 0.028, 0, 0.0, 0.24),
+      hand(0.08, 0.07, 0.09, 0, -0.01, -0.32),
+      hand(0.075, 0.028, 0.028, 0, -0.045, -0.32),
+    );
   }
   model.position.set(0.3, -0.26, -0.7);
   model.scale.setScalar(0.5);
