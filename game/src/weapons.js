@@ -250,7 +250,7 @@ function buildViewModel(def) {
   // hiding behind it — v9's wrist sat behind the palm box, invisible, and
   // the sleeve emerged offset behind the palm's bottom edge: the floating
   // seam. Cuff wider (0.04) as the bright bridge band.
-  function buildForearm({ slim = 1 } = {}) {
+  function buildForearm({ slim = 1, wristR = 0.03, wristZ = 0.004 } = {}) {
     const g = new THREE.Group();
     // Lathe profile (radius, y), elbow end -> wrist end. v12: the belly
     // is DECISIVE — peak 0.074 at y -0.19, more than 2x the wrist (0.036)
@@ -359,9 +359,13 @@ function buildViewModel(def) {
     // top peeks ~0.006 above the cuff as a skin sliver, the bulk hidden
     // inside the cuff cylinder. Glove -> skin sliver -> cuff -> sleeve
     // reads without an obvious sphere joint.
-    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), skin);
+    // v15: wristR / wristZ options — the VK-47 grip hand's wrist was
+    // hidden behind the receiver, leaving a dark gap between the palm
+    // and the cuff (Gito: "Ini masih melayang"). A bigger pad nudged
+    // forward bridges palm -> cuff in plain view.
+    const wrist = new THREE.Mesh(new THREE.SphereGeometry(wristR, 12, 10), skin);
     wrist.scale.set(1.05, 0.42, 0.85);
-    wrist.position.set(0, 0.058, 0.004);
+    wrist.position.set(0, 0.058, wristZ);
     g.add(wrist);
     return g;
   }
@@ -558,8 +562,17 @@ function buildViewModel(def) {
     // cuff + wrist at the corner.
     // v13: stood a touch more upright still (z 0.06 -> 0.02) so a little
     // more of the grip-hand forearm stays in frame.
-    const armR = buildForearm();
-    armR.position.set(0.0, -0.158, 0.347);
+    // v15: the grip hand still FLOATED (Gito, 23:34 WIB) — the cuff top
+    // exactly met the palm's bottom edge (y -0.097) with zero overlap,
+    // and the wrist pad sat below the palm, hidden behind the receiver:
+    // fingers -> dark gap -> cuff. Raised the whole arm +0.026 (y -0.158
+    // -> -0.132) so the cuff overlaps the palm's lower edge by ~0.027,
+    // and a bigger wrist pad (r 0.038, nudged +z) so a skin sliver
+    // bridges palm -> cuff in plain view. Sleeve bottom still runs off
+    // the frame edge (-0.423 < -0.40); cuff top (-0.070) stays clear of
+    // the stock bottom (-0.055). Foregrip hand + P9 hands untouched.
+    const armR = buildForearm({ wristR: 0.038, wristZ: 0.010 });
+    armR.position.set(0.0, -0.132, 0.347);
     armR.rotation.x = -0.35;
     armR.rotation.z = 0.02;
     model.add(armR);
