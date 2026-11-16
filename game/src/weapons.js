@@ -6,23 +6,113 @@ import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { WEAPONS } from './config.js';
 
+let gloveTextureCache = null;
+function makeGloveTexture() {
+  if (gloveTextureCache) return gloveTextureCache;
+  if (typeof document === 'undefined') return null;
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#676b60'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 900; i++) {
+    x.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.10)' : 'rgba(255,255,255,0.07)';
+    x.fillRect(Math.random() * 256, Math.random() * 256, 1.6, 1.6);
+  }
+  x.strokeStyle = 'rgba(0,0,0,0.16)'; x.lineWidth = 1;
+  for (let i = -256; i < 512; i += 12) {
+    x.beginPath(); x.moveTo(i, 128); x.lineTo(i + 128, 256); x.stroke();
+    x.beginPath(); x.moveTo(i + 128, 128); x.lineTo(i, 256); x.stroke();
+  }
+  x.strokeStyle = 'rgba(30,32,35,0.65)'; x.lineWidth = 2;
+  for (const yy of [52, 92, 132]) {
+    x.beginPath(); x.moveTo(8, yy); x.lineTo(248, yy); x.stroke();
+  }
+  x.fillStyle = '#8f938a';
+  for (let i = 0; i < 4; i++) x.fillRect(18 + i * 58, 14, 46, 30);
+  x.strokeStyle = '#f0ead8'; x.lineWidth = 1.6; x.setLineDash([4, 3]);
+  for (let i = 0; i < 4; i++) x.strokeRect(20 + i * 58, 16, 42, 26);
+  x.strokeRect(6, 6, 244, 244);
+  x.setLineDash([]);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  gloveTextureCache = tex;
+  return tex;
+}
+
 function buildViewModel(def) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.canvas), roughness: 0.7, metalness: 0.2 });
   const body = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.5, metalness: 0.35 });
-  // Gloved first-person hands (light gloves, PALETTE.ink). Parented to the weapon
-  // model, so they follow it exactly through recoil kick, the reload dip, and
-  // weapon switches — visual only, no gameplay, combat, or input code is touched.
-  // The hands are deliberately chunky and oversized vs the gun (classic FPS
-  // viewmodel style): palm wider than the grip, knuckle bars protruding on both
-  // sides, thumb on the camera side, and a wrist/forearm entering from the
-  // bottom of the screen, so they read as hands at a glance, not as gun parts.
-  const glove = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.ink), roughness: 0.9, metalness: 0.05 });
-  function hand(w, h, d, x, y, z, rx = 0, rz = 0) {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), glove);
-    m.position.set(x, y, z);
-    m.rotation.x = rx;
-    m.rotation.z = rz;
-    return m;
+  // First-person hands v4: fully articulated gloved hands, rebuilt from the
+  // finger chains up (v3 read as blocks, not hands). Each finger is a chain
+  // of three capsule phalanges with a knuckle sphere at every joint, a
+  // separate two-segment thumb, and a canvas-generated tactical glove texture
+  // (stitching, knuckle pads, finger creases, palm grip). Hands are children
+  // of the weapon model, so they follow recoil kick, the reload dip, and
+  // weapon switches exactly — visual only, no gameplay, combat, or input
+  // code is touched.
+  const gloveTex = makeGloveTexture();
+  const glove = gloveTex
+    ? new THREE.MeshStandardMaterial({ map: gloveTex, bumpMap: gloveTex, bumpScale: 0.5, roughness: 0.85, metalness: 0.05 })
+    : new THREE.MeshStandardMaterial({ color: new THREE.Color('#676b60'), roughness: 0.85, metalness: 0.05 });
+  const glovePad = new THREE.MeshStandardMaterial({ color: new THREE.Color('#7d8177'), roughness: 0.55, metalness: 0.05 });
+  const crease = new THREE.MeshStandardMaterial({ color: new THREE.Color('#26282b'), roughness: 0.95 });
+  const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color('#43464d'), roughness: 0.95, metalness: 0 });
+  // Articulated finger: capsule phalanges chained on joint pivots. Segments
+  // extend along `axis` ('y' = up, 'z' = forward); each joint rotates about
+  // `curlAxis` by angles[i], curling the finger around the grip. A knuckle
+  // sphere sits at every joint and a dark crease ring marks each joint.
+  function buildFinger({ lens, r, axis = 'z', curlAxis = 'y', angles = [] }) {
+    const root = new THREE.Group();
+    let parent = root;
+    lens.forEach((len, i) => {
+      const pivot = new THREE.Group();
+      if (i > 0) {
+        if (axis === 'z') pivot.position.set(0, 0, lens[i - 1]);
+        else pivot.position.set(0, lens[i - 1], 0);
+        pivot.rotation[curlAxis] = angles[i - 1] ?? 0;
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.04, 0.0016, 6, 12), crease);
+        if (axis === 'y') ring.rotation.x = Math.PI / 2;
+        pivot.add(ring);
+      }
+      const knuckle = new THREE.Mesh(new THREE.SphereGeometry(r * 1.15, 10, 8), i === 0 ? glovePad : glove);
+      pivot.add(knuckle);
+      const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), glove);
+      if (axis === 'z') { seg.rotation.x = Math.PI / 2; seg.position.set(0, 0, len / 2); }
+      else seg.position.set(0, len / 2, 0);
+      pivot.add(seg);
+      parent.add(pivot);
+      parent = pivot;
+    });
+    return root;
+  }
+  function buildPalm(w, h) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.032), glove));
+    const bulge = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), glove);
+    bulge.scale.set(w * 0.52, h * 0.5, 0.017);
+    bulge.position.set(0, 0.004, 0.014);
+    g.add(bulge);
+    const thenar = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), glove);
+    thenar.scale.set(0.02, 0.032, 0.014);
+    thenar.position.set(-w * 0.32, -h * 0.3, 0.012);
+    g.add(thenar);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(w * 0.92, 0.018, 0.008), glovePad);
+    pad.position.set(0, h * 0.42, 0.018);
+    g.add(pad);
+    return g;
+  }
+  function buildForearm() {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.042, 0.26, 12), sleeve));
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.037, 0.037, 0.03, 12), glovePad);
+    cuff.position.set(0, 0.1, 0);
+    g.add(cuff);
+    // Rounded wrist at the top so the arm never reads as a cut pipe.
+    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), glovePad);
+    wrist.scale.set(1, 0.55, 1);
+    wrist.position.set(0, 0.12, 0);
+    g.add(wrist);
+    return g;
   }
   const model = new THREE.Group();
   if (def.name === 'P9') {
@@ -30,21 +120,49 @@ function buildViewModel(def) {
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.08), grip);
     handle.position.set(0, -0.08, 0.08);
     model.add(slide, handle);
-    // Right hand wrapped around the pistol grip + forearm from below.
-    model.add(
-      hand(0.10, 0.12, 0.12, 0, -0.08, 0.08),
-      hand(0.11, 0.04, 0.035, 0, -0.045, 0.025),
-      hand(0.03, 0.08, 0.045, 0.055, -0.06, 0.06),
-      hand(0.075, 0.08, 0.22, 0.01, -0.17, 0.20, 0.55, 0),
-    );
-    // Left support hand cupping under the grip, shifted FORWARD so it reads as a
-    // second hand in front of the right hand (not stacked under it), its forearm
-    // angled down-left so the two forearms diverge into a V.
-    model.add(
-      hand(0.095, 0.07, 0.11, 0, -0.16, -0.02),
-      hand(0.10, 0.035, 0.03, 0, -0.135, -0.06),
-      hand(0.07, 0.07, 0.20, -0.09, -0.21, 0.10, 0.55, 0.5),
-    );
+    // Right hand: palm behind the grip; four fingers wrap the grip around
+    // its camera-side edge and across the front, thumb along the frame.
+    const palmR = buildPalm(0.095, 0.105);
+    palmR.position.set(0, -0.075, 0.128);
+    palmR.rotation.x = -0.08;
+    model.add(palmR);
+    [-0.04, -0.067, -0.094, -0.119].forEach((y, i) => {
+      const f = buildFinger({ lens: [0.03, 0.026, 0.016], r: [0.0105, 0.011, 0.0105, 0.0095][i], axis: 'z', curlAxis: 'y', angles: [[-0.65, -0.45], [-0.75, -0.55], [-0.8, -0.6], [-0.85, -0.65]][i] });
+      f.position.set(-0.045, y, 0.105);
+      f.rotation.y = Math.PI + 0.35;
+      model.add(f);
+    });
+    const thumbR = buildFinger({ lens: [0.03, 0.024], r: 0.011, axis: 'z', curlAxis: 'x', angles: [-0.3, -0.25] });
+    thumbR.position.set(-0.048, -0.055, 0.118);
+    thumbR.rotation.y = Math.PI + 0.15;
+    model.add(thumbR);
+    const armR = buildForearm();
+    armR.position.set(0.01, -0.2, 0.22);
+    armR.rotation.x = 0.38;
+    model.add(armR);
+    // Left support hand: palm cupped under the grip, shifted forward; its
+    // fingers rise along the front of the grip, outer fingers fanned so they
+    // read past the grip silhouette; forearm angles down-left (V shape).
+    const palmL = buildPalm(0.10, 0.09);
+    palmL.position.set(-0.02, -0.172, -0.005);
+    palmL.rotation.x = 0.35;
+    palmL.rotation.z = 0.12;
+    model.add(palmL);
+    [-0.042, -0.014, 0.014, 0.042].forEach((lx, i) => {
+      const f = buildFinger({ lens: [0.028, 0.024, 0.018], r: [0.011, 0.0115, 0.0115, 0.01][i], axis: 'y', curlAxis: 'x', angles: [0.15, 0.25] });
+      f.position.set(lx, -0.15, 0.008);
+      f.rotation.z = lx < 0 ? 0.3 : -0.3;
+      model.add(f);
+    });
+    const thumbL = buildFinger({ lens: [0.024, 0.02], r: 0.0105, axis: 'z', curlAxis: 'x', angles: [-0.15, -0.15] });
+    thumbL.position.set(-0.04, -0.135, 0.005);
+    thumbL.rotation.y = Math.PI + 0.2;
+    model.add(thumbL);
+    const armL = buildForearm();
+    armL.position.set(-0.085, -0.225, 0.08);
+    armL.rotation.x = 0.38;
+    armL.rotation.z = 0.45;
+    model.add(armL);
   } else {
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.42), body);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.4), grip);
@@ -55,23 +173,50 @@ function buildViewModel(def) {
     mag.position.set(0, -0.1, -0.05);
     mag.rotation.x = 0.2;
     model.add(receiver, barrel, stock, mag);
-    // Right hand on the stock grip + forearm from below.
-    model.add(
-      hand(0.105, 0.11, 0.13, 0, -0.02, 0.28),
-      hand(0.11, 0.04, 0.035, 0, 0.01, 0.235),
-      hand(0.03, 0.08, 0.045, 0.055, -0.01, 0.26),
-      hand(0.075, 0.08, 0.22, 0.01, -0.11, 0.42, 0.55, 0),
-    );
-    // Left hand on the foregrip: palm under the barrel, knuckles over the top.
-    model.add(
-      hand(0.10, 0.08, 0.12, 0, -0.03, -0.32),
-      hand(0.105, 0.035, 0.03, 0, 0.055, -0.32),
-      hand(0.03, 0.06, 0.04, 0.05, -0.01, -0.30),
-      hand(0.07, 0.07, 0.20, -0.05, -0.10, -0.16, 0.55, 0.2),
-    );
+    // Right hand on the stock grip: palm below the stock, fingers wrapping
+    // up around its camera-side edge and over the top, thumb on the far side.
+    const palmR = buildPalm(0.10, 0.11);
+    palmR.position.set(0, -0.055, 0.29);
+    palmR.rotation.x = -0.05;
+    model.add(palmR);
+    [0.24, 0.272, 0.304, 0.334].forEach((z, i) => {
+      const f = buildFinger({ lens: [0.034, 0.03, 0.026], r: [0.0105, 0.011, 0.0105, 0.0095][i], axis: 'y', curlAxis: 'z', angles: [[-0.65, -0.7], [-0.75, -0.8], [-0.8, -0.85], [-0.85, -0.9]][i] });
+      f.position.set(-0.055, -0.075, z);
+      f.rotation.z = -0.12;
+      model.add(f);
+    });
+    const thumbR = buildFinger({ lens: [0.026, 0.022], r: 0.011, axis: 'z', curlAxis: 'x', angles: [-0.2, -0.2] });
+    thumbR.position.set(0.042, -0.045, 0.33);
+    thumbR.rotation.y = Math.PI + 0.1;
+    model.add(thumbR);
+    const armR = buildForearm();
+    armR.position.set(0.01, -0.14, 0.45);
+    armR.rotation.x = 0.38;
+    model.add(armR);
+    // Left hand on the foregrip: palm under the barrel, fingers wrapping up
+    // around the barrel and over the top, thumb over the top from the far side.
+    const palmL = buildPalm(0.095, 0.10);
+    palmL.position.set(0, -0.035, -0.32);
+    palmL.rotation.x = 0.15;
+    model.add(palmL);
+    [-0.255, -0.285, -0.315, -0.345].forEach((z, i) => {
+      const f = buildFinger({ lens: [0.03, 0.026, 0.022], r: [0.0105, 0.011, 0.0105, 0.0095][i], axis: 'y', curlAxis: 'z', angles: [-0.7, -0.8] });
+      f.position.set(-0.038, -0.038, z);
+      f.rotation.z = -0.1;
+      model.add(f);
+    });
+    const thumbL = buildFinger({ lens: [0.022, 0.018], r: 0.0105, axis: 'y', curlAxis: 'z', angles: [0.6, 0.5] });
+    thumbL.position.set(0.03, -0.005, -0.30);
+    thumbL.rotation.z = 0.15;
+    model.add(thumbL);
+    const armL = buildForearm();
+    armL.position.set(-0.055, -0.125, -0.13);
+    armL.rotation.x = 0.38;
+    armL.rotation.z = 0.2;
+    model.add(armL);
   }
-  model.position.set(0.3, -0.26, -0.7);
-  model.scale.setScalar(0.5);
+  model.position.set(0.28, -0.25, -0.68);
+  model.scale.setScalar(0.58);
   return model;
 }
 
@@ -113,7 +258,7 @@ export function createWeaponSet(camera) {
     flashLeft = Math.max(0, flashLeft - dt);
     kick += (0 - kick) * Math.min(1, dt * 14);
     const model = models[current];
-    model.position.z = -0.7 + kick;
+    model.position.z = -0.68 + kick;
     model.rotation.x = kick * 2.2;
     flash.visible = flashLeft > 0;
     flash.rotation.z = flashLeft * 30;
