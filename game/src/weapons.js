@@ -59,6 +59,16 @@ import { WEAPONS } from './config.js';
 // P9 arms angle a touch wider (less bottom-right crowding), the VK-47
 // grip arm stands a touch more upright. Fingers untouched (v9 as-is);
 // the v10 hand->wrist->forearm connection is preserved.
+// Hands v14 (16 Nov, silent pass — Gito: "terus sempurnakan"): v13's
+// muscle bump (peak 0.016) is too subtle at idle distance — the arms
+// read as shaped, textured sleeves, but the muscle itself is not
+// unmistakable as anatomy at a glance. So v14 pushes the same bump
+// decisively (peak 0.024, sigma 0.085 -> 0.10) and adds a trailing-edge
+// crease shadow: a dark partial shell hugging each side of the forearm
+// at the belly height, where the bump fades to zero, so the muscle
+// reads as a 3D mass in flat light. Rings + band keep hugging via
+// hugMuscle. Fingers untouched (v9 as-is); the v10 hand->wrist->
+// forearm connection is preserved.
 const SKIN = '#f0c49c';
 const GLOVE_DARK = '#26282a';
 const GLOVE_KNUCKLE = '#55585c';
@@ -263,12 +273,13 @@ function buildViewModel(def) {
     const pts = profile.map(([r, y]) => new THREE.Vector2(r * slim, y));
     // v13: ASYMMETRIC muscle. The lathe is displaced toward the
     // camera/palm side (+z) with a Gaussian bump peaking at the belly
-    // (0.016 at y -0.19), so the forearm swells on ONE side like a real
-    // flexor mass instead of a symmetric tube bulge. Weight falls off as
-    // cos^2 around the circumference (front only, zero at the back) and
-    // the bump scales with `slim`. Normals recomputed so the flat light
-    // still shades the new shape.
-    const MUSCLE_PEAK = 0.016, MUSCLE_Y = -0.19, MUSCLE_SIG = 0.085;
+    // (v14: 0.024 at y -0.19, sigma 0.10 — v13's 0.016 / 0.085 was too
+    // subtle at idle distance), so the forearm swells on ONE side like
+    // a real flexor mass instead of a symmetric tube bulge. Weight falls
+    // off as cos^2 around the circumference (front only, zero at the
+    // back) and the bump scales with `slim`. Normals recomputed so the
+    // flat light still shades the new shape.
+    const MUSCLE_PEAK = 0.024, MUSCLE_Y = -0.19, MUSCLE_SIG = 0.10;
     const muscleBump = (y) => MUSCLE_PEAK * slim * Math.exp(-((y - MUSCLE_Y) ** 2) / (2 * MUSCLE_SIG * MUSCLE_SIG));
     // Pushes a geometry's vertices radially outward (xz-plane) by the
     // muscle bump at their height (arm-space y = local y + yOff), front
@@ -326,6 +337,23 @@ function buildViewModel(def) {
       const ring = new THREE.Mesh(ringGeo, foldDark);
       ring.position.set(0, y, 0);
       g.add(ring);
+    }
+    // v14: trailing-edge crease shadow. The bump weight w = max(0, z/r)
+    // fades to zero at the forearm's sides (cylinder theta: x = r sin,
+    // z = r cos, so theta 0 is the front and +/-PI/2 are the sides). A
+    // dark partial shell hugging each side at the belly height draws the
+    // line where the muscle mass ends, so the bulge reads as a 3D mass
+    // in flat light instead of a smooth swell. Radii are the local
+    // profile at the shell's top/bottom (0.0725 @ y -0.145, 0.0689 @
+    // y -0.235) + 0.003 proud, height 0.09 around the belly peak; the
+    // shell is hugMuscle-displaced like the rings, so its front edge
+    // never sinks under the displaced sleeve. Open-ended, no caps.
+    for (const side of [Math.PI / 2, (3 * Math.PI) / 2]) {
+      const creaseGeo = new THREE.CylinderGeometry(0.0755 * slim, 0.0719 * slim, 0.09, 6, 4, true, side - 0.30, 0.6);
+      hugMuscle(creaseGeo, -0.19);
+      const crease = new THREE.Mesh(creaseGeo, foldDark);
+      crease.position.set(0, -0.19, 0);
+      g.add(crease);
     }
     // Wrist v11: flattened pad (not a ball), tucked under the cuff — its
     // top peeks ~0.006 above the cuff as a skin sliver, the bulk hidden
