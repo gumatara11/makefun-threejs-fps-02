@@ -7,8 +7,9 @@
 // Perception (frozen): FOV 100 deg, view 55 m, LOS every 0.12 s staggered,
 // 0.15 s continuous visibility, reaction 0.25/0.28/0.30 s, memory 4.0 s.
 import * as THREE from 'three';
-import { CONFIG, WEAPONS, TEAM } from './config.js';
+import { CONFIG, WEAPONS } from './config.js';
 import { createBody, findPath, nearestNode, flatDistance } from './physics.js';
+import { buildCharacter } from './characters.js';
 
 const EYE_HEIGHT = 1.6;
 const BOT_RADIUS = 0.34;
@@ -19,52 +20,13 @@ export function createBots(scene, world, G) {
   const bots = [];
   let perceiveIndex = 0;
 
-  // Bots read as black monoliths at range; lighten the body so they read as
-  // figures, and widen the team stripe so the team reads at a glance.
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x363b44, roughness: 0.6, metalness: 0.05 });
-  const legMaterial = new THREE.MeshStandardMaterial({ color: 0x252932, roughness: 0.8, metalness: 0.05 });
-
+  // Stage 2: anime tactical characters (characters.js). buildCharacter owns
+  // the visuals; this wrapper only mounts the group and returns its handles.
+  // Materials are per-bot — the death fade must never touch another bot.
   function buildBodyMesh(bot) {
-    const group = new THREE.Group();
-    const teamColor = bot.team === 'attackers' ? TEAM.attackers.marker : TEAM.defenders.marker;
-    const visorColor = bot.team === 'attackers' ? TEAM.attackers.visor : TEAM.defenders.visor;
-    const stripeMaterial = new THREE.MeshStandardMaterial({ color: teamColor, emissive: teamColor, emissiveIntensity: 1.4, roughness: 0.5 });
-    const visorMaterial = new THREE.MeshStandardMaterial({ color: visorColor, emissive: visorColor, emissiveIntensity: 1.4, roughness: 0.4 });
-
-    const legs = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), legMaterial);
-    legs.position.y = 0.4;
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.3), bodyMaterial);
-    torso.position.y = 1.05;
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.12, 0.31), stripeMaterial);
-    stripe.position.y = 1.28;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), bodyMaterial);
-    head.position.y = 1.62;
-    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.31, 0.06, 0.05), visorMaterial);
-    visor.position.set(0, 1.64, -0.16);
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.5), legMaterial);
-    gun.position.set(0.18, 1.15, -0.3);
-    const pack = new THREE.Mesh(
-      new THREE.BoxGeometry(0.2, 0.25, 0.1),
-      new THREE.MeshStandardMaterial({ color: 0xf0a830, emissive: 0xf0a830, emissiveIntensity: 1.2 }),
-    );
-    pack.position.set(0, 1.15, 0.2);
-    pack.visible = false;
-    group.add(legs, torso, stripe, head, visor, gun, pack);
-    group.traverse((mesh) => {
-      if (mesh.isMesh) {
-        mesh.castShadow = true;
-        mesh.userData.actor = bot;
-      }
-    });
-    torso.userData.part = 'torso';
-    head.userData.part = 'head';
-    legs.userData.part = 'legs';
-    visor.userData.part = 'head';
-    stripe.userData.part = 'torso';
-    gun.userData.part = 'torso';
-    pack.userData.part = 'torso';
-    scene.add(group);
-    return { group, pack, materials: [bodyMaterial, legMaterial, stripeMaterial, visorMaterial] };
+    const visuals = buildCharacter(bot);
+    scene.add(visuals.group);
+    return visuals;
   }
 
   function makeBot(id, team, role, x, z, site) {
@@ -114,6 +76,11 @@ export function createBots(scene, world, G) {
     bot.group = visuals.group;
     bot.pack = visuals.pack;
     bot.visualMaterials = visuals.materials;
+    bot.legL = visuals.legL;
+    bot.legR = visuals.legR;
+    bot.torsoMesh = visuals.torso;
+    bot.headMesh = visuals.head;
+    bot.walkPhase = 0;
     bot.hitMeshes = [];
     bot.group.traverse((mesh) => {
       if (mesh.isMesh && mesh.userData.part) bot.hitMeshes.push(mesh);
@@ -157,6 +124,11 @@ export function createBots(scene, world, G) {
       bot.group.rotation.set(0, bot.yaw, 0);
       bot.group.visible = true;
       bot.pack.visible = bot.hasBomb;
+      bot.walkPhase = 0;
+      bot.legL.rotation.x = 0;
+      bot.legR.rotation.x = 0;
+      bot.torsoMesh.position.y = 0;
+      bot.headMesh.position.y = 0;
       for (const material of bot.visualMaterials) {
         material.transparent = false;
         material.opacity = 1;
@@ -523,6 +495,22 @@ export function createBots(scene, world, G) {
       // Sync the visible group with the body.
       bot.group.position.copy(bot.body.position);
       bot.group.rotation.y = bot.yaw;
+      // Walk cycle: legs swing on the hip pivots, torso/head bob slightly.
+      // Arms hold the rifle steady (baked into the torso mesh).
+      if (bot.moving) {
+        bot.walkPhase += dt * 8;
+        const s = Math.sin(bot.walkPhase);
+        bot.legL.rotation.x = s * 0.5;
+        bot.legR.rotation.x = -s * 0.5;
+        const bob = Math.abs(Math.cos(bot.walkPhase)) * 0.03;
+        bot.torsoMesh.position.y = bob;
+        bot.headMesh.position.y = bob;
+      } else {
+        bot.legL.rotation.x *= 0.85;
+        bot.legR.rotation.x *= 0.85;
+        bot.torsoMesh.position.y *= 0.85;
+        bot.headMesh.position.y *= 0.85;
+      }
     }
   }
 
