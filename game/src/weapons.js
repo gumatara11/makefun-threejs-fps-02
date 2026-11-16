@@ -39,6 +39,14 @@ import { WEAPONS } from './config.js';
 // weapon instead of crowding the bottom-right; the VK-47 grip-hand arm
 // is stood more upright so more of it stays in frame. Fingers untouched
 // (v9 as-is); the v10 hand->wrist->forearm connection is preserved.
+// Hands v12 (16 Nov, silent pass — Gito: no report until perfect): v11's
+// belly was a 0.004 ripple on a monotonic taper and one fold ring was
+// buried inside the sleeve, so at idle distance the arms still read as
+// tubes WITH RINGS. v12 makes the belly DECISIVE (peak 0.074, >2x the
+// wrist 0.036, wider than the elbow 0.058), adds a dark crease shadow
+// band under the belly, and makes the 3 fold rings thicker (0.005) +
+// darker (FOLD_DARK) with radii recomputed against the new profile so
+// none can bury. Everything else v10/v11 stands.
 const SKIN = '#f0c49c';
 const GLOVE_DARK = '#26282a';
 const GLOVE_KNUCKLE = '#55585c';
@@ -49,6 +57,10 @@ const GLOVE_CREASE = '#141516';
 const CUFF_YELLOW = '#d8a419';
 const SLEEVE_TAN = '#9a8a68';
 const STRAP_DARK = '#6b5a3e';
+// Hands v12: v11's fold rings were thin AND low-contrast — and one was
+// buried inside the sleeve (profile 0.059 vs ring 0.049). Fold rings and
+// the belly shadow band go in FOLD_DARK, clearly darker than the sleeve.
+const FOLD_DARK = '#43331a';
 
 // Viewmodel base pose (v8: bigger + closer + more central than v7, so the
 // weapon reads large in frame like the Top 3 covers — CAMPANILE's rifle
@@ -84,6 +96,9 @@ function buildViewModel(def) {
   const gloveCrease = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_CREASE), roughness: 0.95 });
   const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color(SLEEVE_TAN), roughness: 0.95, metalness: 0 });
   const strap = new THREE.MeshStandardMaterial({ color: new THREE.Color(STRAP_DARK), roughness: 0.7, metalness: 0.05 });
+  // v12: fold rings + belly shadow band — clearly darker than the sleeve
+  // (#43331a vs #9a8a68) so they read at idle distance in flat lighting.
+  const foldDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(FOLD_DARK), roughness: 0.85, metalness: 0 });
   const cuffYellow = new THREE.MeshStandardMaterial({ color: new THREE.Color(CUFF_YELLOW), roughness: 0.6, metalness: 0.1 });
   const steel = new THREE.MeshStandardMaterial({ color: new THREE.Color('#7e838b'), roughness: 0.4, metalness: 0.4 });
   const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color('#b97a1e'), roughness: 0.5, metalness: 0.2 });
@@ -188,18 +203,22 @@ function buildViewModel(def) {
   // seam. Cuff wider (0.04) as the bright bridge band.
   function buildForearm({ slim = 1 } = {}) {
     const g = new THREE.Group();
-    // Lathe profile (radius, y), elbow end -> wrist end: narrow at the
-    // wrist, a slight waist just below the cuff, a muscle belly swelling
-    // mid-forearm, gentle taper to the elbow — an arm silhouette, not a
-    // straight cone (v10's pipe).
+    // Lathe profile (radius, y), elbow end -> wrist end. v12: the belly
+    // is DECISIVE — peak 0.074 at y -0.19, more than 2x the wrist (0.036)
+    // and clearly wider than the elbow end (0.058). v11's "belly" was a
+    // 0.004 ripple on a monotonic taper, invisible at idle distance, and
+    // its fold ring at -0.06 was buried inside the sleeve (profile 0.059
+    // vs ring 0.049). Ring radii below are recomputed against THIS
+    // profile (local radius + 0.0015), thicker (0.005) and in FOLD_DARK
+    // so they read at idle distance even under flat SwiftShader light.
     const profile = [
-      [0.066, -0.31],
-      [0.064, -0.26],
-      [0.060, -0.20],
-      [0.056, -0.14],
-      [0.048, -0.07],
-      [0.040, -0.02],
-      [0.037, 0.03],
+      [0.058, -0.31],
+      [0.066, -0.26],
+      [0.074, -0.19],
+      [0.072, -0.13],
+      [0.062, -0.07],
+      [0.048, -0.02],
+      [0.040, 0.03],
       [0.036, 0.06],
     ];
     const pts = profile.map(([r, y]) => new THREE.Vector2(r * slim, y));
@@ -211,12 +230,21 @@ function buildViewModel(def) {
     band.rotation.x = Math.PI / 2;
     band.position.set(0, 0.026, 0);
     g.add(band);
-    // Fabric creases: darker strap rings at staggered heights, radius =
-    // local profile radius + 0.001 so each ring sits on the sleeve
-    // surface. The lowest one is the elbow fold.
-    const folds = [[-0.06, 0.049], [-0.15, 0.057], [-0.24, 0.063]];
+    // Crease shadow band under the belly: a dark stripe wrapping the
+    // waist just below the muscle (y -0.039..-0.057), radii proud of the
+    // local profile by ~0.002 so it never z-fights or buries. This is
+    // what makes the bulge read in flat lighting — a shadow line under
+    // the muscle, not just a silhouette change.
+    const shadow = new THREE.Mesh(new THREE.CylinderGeometry(0.0555 * slim, 0.0605 * slim, 0.018, 16), foldDark);
+    shadow.position.set(0, -0.048, 0);
+    g.add(shadow);
+    // Fabric creases: thick dark rings, radius = local profile radius +
+    // 0.0015 so each sits proud of the sleeve surface. v11's rings were
+    // thin (0.0032), low-contrast (#6b5a3e on #9a8a68), and one was
+    // buried inside the sleeve entirely.
+    const folds = [[-0.10, 0.0685], [-0.155, 0.0743], [-0.24, 0.0698]];
     for (const [y, r] of folds) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * slim, 0.0032, 8, 18), strap);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * slim, 0.005, 8, 18), foldDark);
       ring.rotation.x = Math.PI / 2;
       ring.position.set(0, y, 0);
       g.add(ring);
