@@ -154,7 +154,12 @@ function buildViewModel(def) {
     const slide = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.26), body);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.055, 0.12, 0.08), grip);
     handle.position.set(0, -0.08, 0.08);
-    model.add(slide, handle);
+    // Iron sights: front post + rear notch, so the slide stops reading as a plain bar.
+    const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.008, 0.02, 0.008), body);
+    frontSight.position.set(0, 0.04, -0.1);
+    const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.015, 0.012), body);
+    rearSight.position.set(0, 0.037, 0.1);
+    model.add(slide, handle, frontSight, rearSight);
     // Right hand: palm behind the grip; four fingers wrap the grip around
     // its camera-side edge and across the front, thumb along the frame.
     const palmR = buildPalm(0.102, 0.112);
@@ -219,7 +224,14 @@ function buildViewModel(def) {
     const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.09), grip);
     mag.position.set(0, -0.1, -0.05);
     mag.rotation.x = 0.2;
-    model.add(receiver, barrel, stock, mag);
+    // Iron sights + trigger, so the rifle stops reading as plain boxes.
+    const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.02), body);
+    rearSight.position.set(0, 0.06, 0.18);
+    const frontSight = new THREE.Mesh(new THREE.BoxGeometry(0.01, 0.03, 0.01), body);
+    frontSight.position.set(0, 0.06, -0.55);
+    const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.02), body);
+    trigger.position.set(0, -0.065, 0.08);
+    model.add(receiver, barrel, stock, mag, rearSight, frontSight, trigger);
     // Right hand on the stock grip: palm below the stock, fingers wrapping
     // up around its camera-side edge and over the top, thumb on the far side.
     const palmR = buildPalm(0.108, 0.118);
@@ -274,7 +286,70 @@ function buildViewModel(def) {
   }
   model.position.set(0.28, -0.25, -0.68);
   model.scale.setScalar(0.62);
+  mergeStaticByMaterial(model);
   return model;
+}
+
+// Merge every static mesh of a view model into one geometry per material.
+// The finger pivots never animate after build (only the whole model kicks
+// and dips on fire/reload), so baking them keeps the exact same look with
+// ~100 fewer draw calls — the bench was at 217 calls vs the 180 budget.
+function mergeGeometries(geos) {
+  let vCount = 0;
+  let iCount = 0;
+  for (const g of geos) {
+    vCount += g.attributes.position.count;
+    iCount += g.index ? g.index.count : g.attributes.position.count;
+  }
+  if (vCount === 0) return null;
+  const pos = new Float32Array(vCount * 3);
+  const nor = new Float32Array(vCount * 3);
+  const uv = new Float32Array(vCount * 2);
+  const IndexArray = vCount > 65535 ? Uint32Array : Uint16Array;
+  const idx = new IndexArray(iCount);
+  let vOff = 0;
+  let iOff = 0;
+  for (const g of geos) {
+    const n = g.attributes.position.count;
+    pos.set(g.attributes.position.array, vOff * 3);
+    nor.set(g.attributes.normal.array, vOff * 3);
+    if (g.attributes.uv) uv.set(g.attributes.uv.array, vOff * 2);
+    if (g.index) {
+      const src = g.index.array;
+      for (let i = 0; i < src.length; i++) idx[iOff + i] = src[i] + vOff;
+      iOff += src.length;
+    } else {
+      for (let i = 0; i < n; i++) idx[iOff + i] = vOff + i;
+      iOff += n;
+    }
+    vOff += n;
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  out.setIndex(new THREE.BufferAttribute(idx, 1));
+  return out;
+}
+
+function mergeStaticByMaterial(model) {
+  model.updateMatrixWorld(true);
+  const inv = model.matrixWorld.clone().invert();
+  const groups = new Map();
+  const meshes = [];
+  model.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  for (const mesh of meshes) {
+    const geo = mesh.geometry.clone();
+    geo.applyMatrix4(inv.clone().multiply(mesh.matrixWorld));
+    if (!groups.has(mesh.material)) groups.set(mesh.material, []);
+    groups.get(mesh.material).push(geo);
+    mesh.parent.remove(mesh);
+    mesh.geometry.dispose();
+  }
+  for (const [material, geos] of groups) {
+    const merged = mergeGeometries(geos);
+    if (merged) model.add(new THREE.Mesh(merged, material));
+  }
 }
 
 export function createWeaponSet(camera) {

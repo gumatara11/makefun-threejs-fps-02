@@ -79,6 +79,56 @@ export function createWorld(scene) {
   box(1.2, 3.2, 1.2, -14, 1.6, -8, 'hairline');
   box(2.4, 0.9, 1.2, -2, 0.45, 6, 'hairline');
 
+  // Industrial props (owner 16 Nov 2026): barrels, wall pipes, site signs,
+  // corner crates. All placed clear of waypoints, lane edges, spawns and
+  // plant zones, so bots never get stuck and no sightline gap is blocked.
+  function cylinder(radius, height, x, z, material, collide = true) {
+    const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 12), materials[material]);
+    mesh.position.set(x, height / 2, z);
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    group.add(mesh);
+    if (collide) {
+      colliders.push(new THREE.Box3().setFromObject(mesh));
+      shootables.push(mesh);
+    }
+    return mesh;
+  }
+  // Barrel clusters, 3 m off their lanes.
+  cylinder(0.45, 1.0, -12, -15, 'accent');
+  cylinder(0.45, 1.0, -10.9, -15.1, 'hairline');
+  cylinder(0.45, 1.0, 12, 15, 'accent');
+  cylinder(0.45, 1.0, 13.1, 15.2, 'hairline');
+  // Corner crates.
+  box(1.2, 1.1, 1.2, -20, 0.55, -15, 'surface');
+  box(1.2, 1.1, 1.2, 21, 0.55, -15, 'surface');
+  // Wall pipes, high up, visual only — they never block movement or shots.
+  box(40, 0.25, 0.25, 0, 3.8, -17.8, 'hairline', false);
+  box(40, 0.25, 0.25, 0, 3.8, 17.8, 'hairline', false);
+  // Site signs on the east wall: big canvas letters, no external texture.
+  function siteSign(letter, color, z) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 160;
+    const x = c.getContext('2d');
+    x.fillStyle = '#24272c'; x.fillRect(0, 0, 256, 160);
+    x.strokeStyle = color; x.lineWidth = 10; x.strokeRect(8, 8, 240, 144);
+    x.fillStyle = color; x.font = 'bold 110px sans-serif';
+    x.textAlign = 'center'; x.textBaseline = 'middle';
+    x.fillText(letter, 128, 84);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const sign = new THREE.Mesh(
+      new THREE.PlaneGeometry(3.2, 2.0),
+      new THREE.MeshStandardMaterial({ map: tex, roughness: 0.85, metalness: 0.05 }),
+    );
+    sign.position.set(23.9, 3.4, z);
+    sign.rotation.y = -Math.PI / 2;
+    group.add(sign);
+    return sign;
+  }
+  siteSign('A', '#2ec4b6', -9);
+  siteSign('B', '#f0a830', 9);
+
   // Plant-zone floor strips (visual only, no collision): teal for A, amber for B.
   box(8, 0.04, 8, 18, 0.02, -9, 'teal', false);
   box(8, 0.04, 8, 18, 0.02, 9, 'accent', false);

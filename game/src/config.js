@@ -10,7 +10,7 @@ export const CONFIG = {
   buySeconds: 12,
   roundSeconds: 100,
   plantSeconds: 3.2,
-  bombSeconds: 35,
+  bombSeconds: 40, // Owner 16 Nov 2026: 40 s for -02 (was 35 s in the frozen spec).
   defuseSeconds: 5.0,
   endBannerSeconds: 4,
   // Movement
