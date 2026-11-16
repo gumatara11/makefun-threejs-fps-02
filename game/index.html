@@ -19,6 +19,12 @@
     --radius-control: 8px;
     --font-ui: system-ui, -apple-system, 'Segoe UI', sans-serif;
     --font-readout: ui-monospace, 'SF Mono', Menlo, monospace;
+    /* Anime-tactical HUD identity: angular clipped panels, foundry-dusk
+       gradients, teal (attackers) / amber (defenders) team colors. */
+    --clip: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+    --clip-sm: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 7px 100%, 0 calc(100% - 7px));
+    --panel-bg: linear-gradient(155deg, rgba(36, 40, 48, .93), rgba(17, 19, 23, .93));
+    --danger: #ff5a4a;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -54,8 +60,16 @@
     font-family: var(--font-readout);
     font-size: 14px;
     color: var(--muted);
+    background: var(--panel-bg);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--teal);
+    clip-path: var(--clip-sm);
+    padding: 8px 14px 8px 12px;
+    letter-spacing: .08em;
   }
-  #health b { color: var(--ink); font-weight: 500; font-size: 28px; }
+  #health b { color: var(--ink); font-weight: 600; font-size: 28px; letter-spacing: -0.02em; }
+  #health.low { border-left-color: var(--danger); }
+  #health.low b { color: var(--danger); }
   #ammo {
     position: fixed;
     right: 32px;
@@ -68,16 +82,26 @@
     line-height: 1;
     letter-spacing: -0.03em;
     color: var(--ink);
+    background: var(--panel-bg);
+    border: 1px solid var(--hairline);
+    border-right: 3px solid var(--accent);
+    clip-path: var(--clip-sm);
+    padding: 6px 16px 8px;
   }
   #ammo.empty #ammo-mag { color: var(--accent); }
   #ammo-reserve { font-size: 16px; letter-spacing: -0.01em; color: var(--muted); }
   #weapon-value {
     position: fixed;
     right: 32px;
-    bottom: 88px;
+    bottom: 104px;
     font-family: var(--font-readout);
-    font-size: 14px;
-    color: var(--muted);
+    font-size: 13px;
+    letter-spacing: .14em;
+    color: var(--ink);
+    background: var(--panel-bg);
+    border: 1px solid var(--hairline);
+    clip-path: var(--clip-sm);
+    padding: 5px 12px;
   }
   #topbar {
     position: fixed;
@@ -90,14 +114,18 @@
     font-family: var(--font-readout);
     font-size: 15px;
     color: var(--ink);
-    background: color-mix(in srgb, var(--canvas) 72%, transparent);
+    background: var(--panel-bg);
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-panel);
-    padding: 8px 16px;
+    border-top: 2px solid var(--accent);
+    clip-path: var(--clip);
+    padding: 8px 18px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .45);
   }
-  #timer-value { color: var(--accent); font-size: 20px; }
-  #money-value { color: var(--teal); }
-  #bomb-value { color: var(--accent); }
+  #timer-value { color: var(--accent); font-size: 20px; font-weight: 600; }
+  #money-value { color: var(--teal); font-weight: 600; }
+  #bomb-value { color: var(--accent); font-weight: 600; }
+  #score-value { font-weight: 600; }
+  #alive-value { color: var(--muted); }
   #killfeed {
     position: fixed;
     right: 32px;
@@ -106,22 +134,56 @@
     gap: 4px;
     font-family: var(--font-readout);
     font-size: 13px;
-    color: var(--muted);
+    color: var(--ink);
     text-align: right;
+    justify-items: end;
   }
+  #killfeed > div {
+    background: var(--panel-bg);
+    border: 1px solid var(--hairline);
+    border-right: 2px solid var(--accent);
+    clip-path: var(--clip-sm);
+    padding: 4px 10px;
+  }
+  /* Minimap: top-down 48x36 m foundry yard, bottom-left above the health panel. */
+  #minimap {
+    position: fixed;
+    left: 32px;
+    bottom: 88px;
+    background: var(--panel-bg);
+    border: 1px solid var(--hairline);
+    border-left: 3px solid var(--teal);
+    clip-path: var(--clip-sm);
+    padding: 7px 8px 8px;
+  }
+  #minimap-label {
+    font-family: var(--font-readout);
+    font-size: 10px;
+    letter-spacing: .18em;
+    color: var(--muted);
+    margin-bottom: 5px;
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  #minimap-label b { color: var(--teal); font-weight: 600; }
+  #minimap-label i { color: var(--accent); font-style: normal; }
+  #minimap-canvas { display: block; width: 192px; height: 144px; }
   #banner {
     position: fixed;
     left: 50%;
     top: 22%;
     transform: translateX(-50%);
     font-size: 28px;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--ink);
-    background: color-mix(in srgb, var(--canvas) 82%, transparent);
+    background: linear-gradient(90deg, rgba(240, 168, 48, .16), rgba(36, 40, 48, .93) 18%, rgba(17, 19, 23, .93) 82%, rgba(46, 196, 182, .16));
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-panel);
-    padding: 12px 24px;
+    border-bottom: 2px solid var(--accent);
+    clip-path: var(--clip);
+    padding: 12px 28px;
+    text-shadow: 0 2px 8px rgba(0, 0, 0, .6);
   }
   #banner[hidden] { display: none; }
   #plantbar {
@@ -132,26 +194,29 @@
     width: 280px;
   }
   #plantbar[hidden] { display: none; }
-  #plantbar-label { font-size: 13px; color: var(--muted); text-align: center; margin-bottom: 6px; }
-  #plantbar-track { height: 6px; background: var(--hairline); border-radius: 3px; overflow: hidden; }
-  #plantbar-fill { height: 100%; width: 0; background: var(--accent); }
+  #plantbar-label { font-size: 13px; color: var(--ink); text-align: center; margin-bottom: 6px; font-family: var(--font-readout); letter-spacing: .14em; text-transform: uppercase; text-shadow: 0 1px 4px rgba(0, 0, 0, .8); }
+  #plantbar-track { height: 8px; background: rgba(17, 19, 23, .9); border: 1px solid var(--hairline); clip-path: var(--clip-sm); overflow: hidden; }
+  #plantbar-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--teal), var(--accent)); }
   #buymenu {
     position: fixed;
     left: 32px;
     top: 76px;
     width: 260px;
-    background: var(--surface);
+    background: var(--panel-bg);
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-panel);
+    border-left: 3px solid var(--accent);
+    clip-path: var(--clip);
     padding: 16px;
     font-size: 14px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .45);
   }
   #buymenu[hidden] { display: none; }
-  #buymenu h2 { margin: 0 0 4px; font-size: 16px; font-weight: 500; }
-  #buymenu-money { color: var(--teal); font-family: var(--font-readout); margin-bottom: 12px; }
+  #buymenu h2 { margin: 0 0 4px; font-size: 16px; font-weight: 600; letter-spacing: .06em; }
+  #buymenu h2::after { content: ''; display: block; height: 2px; margin-top: 6px; background: linear-gradient(90deg, var(--accent), var(--teal)); }
+  #buymenu-money { color: var(--teal); font-family: var(--font-readout); font-weight: 600; margin-bottom: 12px; }
   #buymenu .item { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--hairline); }
   #buymenu .item.disabled { opacity: .4; }
-  #buymenu .item kbd { font-family: var(--font-readout); color: var(--accent); }
+  #buymenu .item kbd { font-family: var(--font-readout); color: var(--accent); background: rgba(240, 168, 48, .12); border: 1px solid rgba(240, 168, 48, .45); border-radius: 3px; padding: 1px 6px; }
   #buymenu .hint { margin-top: 12px; color: var(--muted); font-size: 12px; }
 
   .overlay {
@@ -166,17 +231,22 @@
   .panel {
     width: min(460px, 100%);
     padding: 32px;
-    background: var(--surface);
+    background: var(--panel-bg);
     border: 1px solid var(--hairline);
-    border-radius: var(--radius-panel);
+    border-top: 2px solid var(--accent);
+    clip-path: var(--clip);
   }
   .panel h1 {
     margin: 0 0 8px;
     font-size: 32px;
     line-height: 1.15;
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: -0.02em;
     text-wrap: balance;
+    background: linear-gradient(90deg, var(--accent), var(--teal));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
   .panel h1 .teal { color: var(--teal); }
   .panel p {
@@ -189,12 +259,13 @@
   }
   #play {
     font: inherit;
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: .04em;
     padding: 12px 16px;
     white-space: nowrap;
     border: 1px solid var(--accent);
-    border-radius: var(--radius-control);
-    background: var(--accent);
+    clip-path: var(--clip-sm);
+    background: linear-gradient(90deg, var(--accent), #e8b45a);
     color: var(--canvas);
     cursor: pointer;
     transition: background-color 120ms ease;
@@ -243,6 +314,10 @@
   <div id="health">HP <b id="health-value">100</b></div>
   <div id="weapon-value">P9</div>
   <div id="ammo"><span id="ammo-mag">12</span><span id="ammo-reserve">/ 48</span></div>
+  <div id="minimap">
+    <div id="minimap-label"><span><b>ATK</b> FOUNDRY YARD <i>DEF</i></span><span>A·B</span></div>
+    <canvas id="minimap-canvas" width="192" height="144"></canvas>
+  </div>
   <div id="killfeed"></div>
   <div id="banner" hidden></div>
   <div id="plantbar" hidden>
