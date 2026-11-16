@@ -6,77 +6,58 @@ import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { WEAPONS } from './config.js';
 
-let gloveTextureCache = null;
-// Anime hands (Stage 3): skin-tone fingers/palm with a dark tactical-glove
-// cuff + sleeve — the old flat olive glove blocks read as mittens. Fingers
-// are slimmer with clearer knuckles; the wrist shows skin between palm and
-// glove cuff so the hand reads as a hand, not a block.
+// Hands v8 (16 Nov, after Gito's "tiru Top 3" direction): the Top 3
+// threejs-fps-02 covers (Kilnyard 97.4%, Lantern Rock 95.5%, CAMPANILE
+// 95.5% — repos withheld, no code copied) all show the same lesson: the
+// weapon is BIG and readable in frame, and the hands read through CONTRAST
+// — CAMPANILE's model is a dark-gloved hand on the pistol grip + a gloved
+// hand on the foregrip, a bright yellow cuff, and a long tan sleeve. So v8
+// drops the v7 skin-tone fingers for near-black tactical gloves (dark
+// fingers + palm, mid-grey knuckles, lighter fingertip pads), a yellow cuff,
+// and a tan sleeve. A thin skin sliver stays at the wrist (anime touch).
+// Fingers are thinner with wider gaps so each finger reads as its own shape
+// wrapping the grip — not one capsule block.
 const SKIN = '#f0c49c';
-const SKIN_PAD = '#f7d9b8';
-const SKIN_TIP = '#dd9a72';
-const CREASE_SKIN = '#6b3f24';
-function makeGloveTexture() {
-  if (gloveTextureCache) return gloveTextureCache;
-  if (typeof document === 'undefined') return null;
-  const c = document.createElement('canvas');
-  c.width = 256; c.height = 256;
-  const x = c.getContext('2d');
-  x.fillStyle = '#7e8272'; x.fillRect(0, 0, 256, 256);
-  for (let i = 0; i < 1400; i++) {
-    x.fillStyle = Math.random() < 0.5 ? 'rgba(0,0,0,0.20)' : 'rgba(255,255,255,0.14)';
-    x.fillRect(Math.random() * 256, Math.random() * 256, 2.2, 2.2);
-  }
-  x.strokeStyle = 'rgba(0,0,0,0.28)'; x.lineWidth = 2;
-  for (let i = -256; i < 512; i += 10) {
-    x.beginPath(); x.moveTo(i, 128); x.lineTo(i + 128, 256); x.stroke();
-    x.beginPath(); x.moveTo(i + 128, 128); x.lineTo(i, 256); x.stroke();
-  }
-  x.strokeStyle = 'rgba(12,14,16,0.9)'; x.lineWidth = 3;
-  for (const yy of [52, 92, 132]) {
-    x.beginPath(); x.moveTo(8, yy); x.lineTo(248, yy); x.stroke();
-  }
-  x.fillStyle = '#b9bdb0';
-  for (let i = 0; i < 4; i++) x.fillRect(16 + i * 58, 12, 50, 34);
-  x.strokeStyle = '#fff3c8'; x.lineWidth = 2.5; x.setLineDash([5, 3]);
-  for (let i = 0; i < 4; i++) x.strokeRect(18 + i * 58, 14, 46, 30);
-  x.strokeRect(6, 6, 244, 244);
-  x.setLineDash([]);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  gloveTextureCache = tex;
-  return tex;
-}
+const GLOVE_DARK = '#26282a';
+const GLOVE_KNUCKLE = '#55585c';
+const GLOVE_TIP = '#6a6e73';
+const GLOVE_CREASE = '#141516';
+const CUFF_YELLOW = '#d8a419';
+const SLEEVE_TAN = '#9a8a68';
+const STRAP_DARK = '#6b5a3e';
 
-// Viewmodel base pose (Stage 3: slightly larger + more central than v6 so both
-// hands read in frame; viewmodel-only, no gameplay effect).
-const VIEW_BASE = { x: 0.26, y: -0.25, z: -0.68 };
-const VIEW_SCALE = 0.68;
+// Viewmodel base pose (v8: bigger + closer + more central than v7, so the
+// weapon reads large in frame like the Top 3 covers — CAMPANILE's rifle
+// spans ~35% of frame width; v7's P9 spanned ~15%. Viewmodel-only, no
+// gameplay effect; reload/switch animations reference this constant).
+// v8.1: y raised (-0.26 -> -0.20) and scale trimmed (0.85 -> 0.78) — the
+// first v8 values pushed both hands to the bottom edge of the frame, the
+// VK-47's foregrip hand falling off-screen entirely.
+const VIEW_BASE = { x: 0.21, y: -0.20, z: -0.62 };
+const VIEW_SCALE = 0.78;
 
 function buildViewModel(def) {
   const grip = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.canvas), roughness: 0.7, metalness: 0.2 });
   const body = new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.hairline), roughness: 0.5, metalness: 0.35 });
-  // First-person hands v7 (Stage 3): articulated hands in anime skin tones
-  // (fingers/palm) with a dark tactical-glove cuff + sleeve — slimmer
-  // fingers, clearer knuckles, rosy fingertips. Same finger-chain builder
-  // as v5, refined proportions/materials, not rebuilt from zero.
+  // First-person hands v8: near-black tactical gloves (dark fingers/palm,
+  // mid-grey knuckles, lighter fingertip pads) + bright yellow cuff + tan
+  // sleeve — the CAMPANILE look. Skin survives only as a thin wrist sliver.
   // Hands are children of the weapon model, so they follow recoil kick, the
   // reload dip, and weapon switches exactly — visual only, no gameplay,
   // combat, or input code is touched.
-  const gloveTex = makeGloveTexture();
-  const glove = gloveTex
-    ? new THREE.MeshStandardMaterial({ map: gloveTex, bumpMap: gloveTex, bumpScale: 0.7, roughness: 0.85, metalness: 0.05 })
-    : new THREE.MeshStandardMaterial({ color: new THREE.Color('#7e8272'), roughness: 0.85, metalness: 0.05 });
   const skin = new THREE.MeshStandardMaterial({ color: new THREE.Color(SKIN), roughness: 0.55, metalness: 0 });
-  const skinPad = new THREE.MeshStandardMaterial({ color: new THREE.Color(SKIN_PAD), roughness: 0.6, metalness: 0 });
-  const skinTip = new THREE.MeshStandardMaterial({ color: new THREE.Color(SKIN_TIP), roughness: 0.6, metalness: 0 });
-  const creaseSkin = new THREE.MeshStandardMaterial({ color: new THREE.Color(CREASE_SKIN), roughness: 0.9 });
-  const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color('#6e7278'), roughness: 0.95, metalness: 0 });
-  const strap = new THREE.MeshStandardMaterial({ color: new THREE.Color('#a89a7a'), roughness: 0.7, metalness: 0.05 });
+  const gloveDark = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_DARK), roughness: 0.9, metalness: 0 });
+  const gloveKnuckle = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_KNUCKLE), roughness: 0.8, metalness: 0 });
+  const gloveTip = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_TIP), roughness: 0.75, metalness: 0 });
+  const gloveCrease = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_CREASE), roughness: 0.95 });
+  const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color(SLEEVE_TAN), roughness: 0.95, metalness: 0 });
+  const strap = new THREE.MeshStandardMaterial({ color: new THREE.Color(STRAP_DARK), roughness: 0.7, metalness: 0.05 });
+  const cuffYellow = new THREE.MeshStandardMaterial({ color: new THREE.Color(CUFF_YELLOW), roughness: 0.6, metalness: 0.1 });
   const steel = new THREE.MeshStandardMaterial({ color: new THREE.Color('#7e838b'), roughness: 0.4, metalness: 0.4 });
   const accent = new THREE.MeshStandardMaterial({ color: new THREE.Color('#b97a1e'), roughness: 0.5, metalness: 0.2 });
-  // Per-hand material set for fingers: skin segments, rosy fingertips,
-  // pale knuckle pads, dark joint creases.
-  const HAND_MATS = { seg: skin, tip: skinTip, pad: skinPad, ring: creaseSkin };
+  // Per-hand material set for fingers: dark glove segments, lighter
+  // fingertip pads, mid-grey knuckle pads, near-black joint creases.
+  const HAND_MATS = { seg: gloveDark, tip: gloveTip, pad: gloveKnuckle, ring: gloveCrease };
   // Articulated finger: capsule phalanges chained on joint pivots. Segments
   // extend along `axis` ('y' = up, 'z' = forward); each joint rotates about
   // `curlAxis` by angles[i], curling the finger around the grip. A knuckle
@@ -92,7 +73,7 @@ function buildViewModel(def) {
         if (axis === 'z') pivot.position.set(0, 0, lens[i - 1]);
         else pivot.position.set(0, lens[i - 1], 0);
         pivot.rotation[curlAxis] = angles[i - 1] ?? 0;
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.08, 0.0016, 6, 12), mats.ring);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.08, 0.0022, 6, 12), mats.ring);
         if (axis === 'y') ring.rotation.x = Math.PI / 2;
         ring.scale.set(1.25, 0.75, 1);
         pivot.add(ring);
@@ -105,12 +86,14 @@ function buildViewModel(def) {
       pivot.add(knuckle);
       const last = i === lens.length - 1;
       const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), last ? mats.tip : mats.seg);
-      seg.scale.set(1.25, 1, 0.75);
+      // Fingertips taper (narrower + flatter than the middle segments) so
+      // each fingertip reads as its own rounded pad, not a capsule end.
+      seg.scale.set(last ? 1.1 : 1.25, 1, last ? 0.7 : 0.75);
       if (axis === 'z') { seg.rotation.x = Math.PI / 2; seg.position.set(0, 0, len / 2); }
       else seg.position.set(0, len / 2, 0);
       pivot.add(seg);
       if (last) {
-        const tip = new THREE.Mesh(new THREE.SphereGeometry(r * 1.05, 10, 8), mats.tip);
+        const tip = new THREE.Mesh(new THREE.SphereGeometry(r * 1.12, 10, 8), mats.tip);
         tip.scale.set(...flat);
         if (axis === 'z') tip.position.set(0, 0, len + r * 0.5);
         else tip.position.set(0, len + r * 0.5, 0);
@@ -123,38 +106,46 @@ function buildViewModel(def) {
   }
   function buildPalm(w, h) {
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.042), skin));
-    const bulge = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), skin);
+    g.add(new THREE.Mesh(new THREE.BoxGeometry(w, h, 0.042), gloveDark));
+    const bulge = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), gloveDark);
     bulge.scale.set(w * 0.52, h * 0.5, 0.02);
     bulge.position.set(0, 0.004, 0.016);
     g.add(bulge);
-    const thenar = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), skin);
+    const thenar = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), gloveDark);
     thenar.scale.set(0.026, 0.038, 0.018);
     thenar.position.set(-w * 0.32, -h * 0.3, 0.014);
     g.add(thenar);
-    const heel = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), skin);
+    const heel = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 8), gloveDark);
     heel.scale.set(w * 0.4, h * 0.22, 0.018);
     heel.position.set(0, -h * 0.42, 0.014);
     g.add(heel);
-    const pad = new THREE.Mesh(new THREE.BoxGeometry(w * 0.92, 0.018, 0.008), skinPad);
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(w * 0.92, 0.018, 0.008), gloveKnuckle);
     pad.position.set(0, h * 0.42, 0.022);
     g.add(pad);
-    // Knuckle roots: one bump per finger where the fingers leave the palm.
+    // Knuckle roots: one bump per finger where the fingers leave the palm —
+    // bigger + wider apart in v8 so each finger base reads on its own.
     for (let i = 0; i < 4; i++) {
-      const root = new THREE.Mesh(new THREE.SphereGeometry(0.011, 10, 8), skinPad);
-      root.position.set(-w * 0.36 + i * w * 0.24, h * 0.47, 0.02);
+      const root = new THREE.Mesh(new THREE.SphereGeometry(0.013, 10, 8), gloveKnuckle);
+      root.position.set(-w * 0.38 + i * w * 0.253, h * 0.47, 0.02);
       g.add(root);
+    }
+    // Separation grooves: thin dark slots between the finger roots, running
+    // down the back of the hand — this is what makes the back of the hand
+    // read as four separated fingers instead of one smooth glove blob.
+    for (let i = 0; i < 3; i++) {
+      const groove = new THREE.Mesh(new THREE.BoxGeometry(0.004, h * 0.62, 0.004), gloveCrease);
+      groove.position.set(-w * 0.38 + (i + 0.5) * w * 0.253, h * 0.18, 0.022);
+      g.add(groove);
     }
     return g;
   }
-  // Forearm v7 (Stage 3): skin wrist between palm and glove cuff, so the
-  // hand-to-sleeve transition reads as skin → tactical glove cuff → sleeve,
-  // not one grey pipe. Cuff stays the dark textured glove; a tan strap band
-  // sits over it.
+  // Forearm v8: skin wrist between palm and cuff, bright YELLOW cuff band
+  // (CAMPANILE's signature cuff), dark strap over it, tan sleeve — so the
+  // hand-to-sleeve transition reads as glove → yellow cuff → tan sleeve.
   function buildForearm() {
     const g = new THREE.Group();
     g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.05, 0.11, 16), sleeve));
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.025, 16), glove);
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.025, 16), cuffYellow);
     cuff.position.set(0, 0.045, 0);
     g.add(cuff);
     const band = new THREE.Mesh(new THREE.TorusGeometry(0.0325, 0.003, 8, 16), strap);
@@ -223,20 +214,22 @@ function buildViewModel(def) {
     palmR.position.set(0, -0.075, 0.128);
     palmR.rotation.x = -0.08;
     model.add(palmR);
-    // Per-finger anatomy: middle longest, pinky shortest/thinnest, curl
-    // tightens toward the pinky, tips stagger back in an arc.
+    // Per-finger anatomy v8: thinner fingers, wider gaps (0.033 apart, so
+    // each finger reads as its own shape), longer tips that reach the
+    // front-left corner of the grip. Index finger rests along the frame
+    // (CAMPANILE pose) instead of curling with the rest.
     [
-      { y: -0.038, lens: [0.028, 0.024, 0.014], r: 0.0095, angles: [-0.6, -0.4], dz: 0.002 },
-      { y: -0.066, lens: [0.032, 0.027, 0.015], r: 0.0105, angles: [-0.72, -0.52], dz: 0 },
-      { y: -0.094, lens: [0.03, 0.026, 0.014], r: 0.01, angles: [-0.78, -0.58], dz: -0.002 },
-      { y: -0.12, lens: [0.024, 0.02, 0.012], r: 0.0078, angles: [-0.85, -0.65], dz: -0.004 },
+      { y: -0.036, lens: [0.03, 0.026, 0.019], r: 0.008, angles: [-0.35, -0.15], dz: 0.002 },
+      { y: -0.069, lens: [0.034, 0.029, 0.021], r: 0.0088, angles: [-0.68, -0.38], dz: 0 },
+      { y: -0.102, lens: [0.032, 0.028, 0.02], r: 0.0084, angles: [-0.74, -0.42], dz: -0.002 },
+      { y: -0.135, lens: [0.026, 0.022, 0.017], r: 0.0068, angles: [-0.8, -0.45], dz: -0.004 },
     ].forEach((cfg) => {
       const f = buildFinger({ lens: cfg.lens, r: cfg.r, axis: 'z', curlAxis: 'y', angles: cfg.angles });
       f.position.set(-0.045, cfg.y, 0.105 + cfg.dz);
       f.rotation.y = Math.PI + 0.35;
       model.add(f);
     });
-    const thumbR = buildFinger({ lens: [0.034, 0.027], r: 0.011, axis: 'z', curlAxis: 'x', angles: [-0.3, -0.25] });
+    const thumbR = buildFinger({ lens: [0.034, 0.027], r: 0.0088, axis: 'z', curlAxis: 'x', angles: [-0.3, -0.25] });
     thumbR.position.set(-0.048, -0.055, 0.118);
     thumbR.rotation.y = Math.PI + 0.15;
     model.add(thumbR);
@@ -245,34 +238,35 @@ function buildViewModel(def) {
     armR.rotation.x = -0.55;
     armR.rotation.z = -0.12;
     model.add(armR);
-    // Left support hand: palm cupped under the grip, shifted forward and
-    // down-left of the right hand so it reads as a second hand, not hidden
-    // behind it; fingers rise along the front of the grip, outer fingers
-    // fanned so they read past the grip silhouette; forearm angles down-left.
+    // Left support hand v8 (occlusion fix): moved DOWN-LEFT-FORWARD of the
+    // grip (palm under the slide, clear of the right hand's silhouette) so
+    // it reads as a second hand instead of hiding behind the grip. Fingers
+    // rise along the FRONT-LEFT of the grip, fanned wide with real gaps;
+    // forearm enters from the bottom-left corner, far from the right arm.
     const palmL = buildPalm(0.106, 0.096);
-    palmL.position.set(-0.042, -0.158, -0.005);
-    palmL.rotation.x = 0.45;
-    palmL.rotation.z = 0.12;
+    palmL.position.set(-0.078, -0.172, -0.03);
+    palmL.rotation.x = 0.55;
+    palmL.rotation.z = 0.28;
     model.add(palmL);
     [
-      { lx: -0.042, lens: [0.026, 0.022, 0.016], r: 0.0095, angles: [0.12, 0.2] },
-      { lx: -0.014, lens: [0.03, 0.025, 0.017], r: 0.0105, angles: [0.18, 0.28] },
-      { lx: 0.014, lens: [0.028, 0.024, 0.016], r: 0.01, angles: [0.2, 0.3] },
-      { lx: 0.042, lens: [0.022, 0.018, 0.013], r: 0.0078, angles: [0.25, 0.35] },
+      { lx: -0.05, lens: [0.03, 0.026, 0.019], r: 0.008, angles: [0.12, 0.2] },
+      { lx: -0.02, lens: [0.034, 0.029, 0.02], r: 0.0088, angles: [0.18, 0.28] },
+      { lx: 0.01, lens: [0.032, 0.028, 0.019], r: 0.0084, angles: [0.2, 0.3] },
+      { lx: 0.04, lens: [0.026, 0.022, 0.016], r: 0.0068, angles: [0.25, 0.35] },
     ].forEach((cfg) => {
       const f = buildFinger({ lens: cfg.lens, r: cfg.r, axis: 'y', curlAxis: 'x', angles: cfg.angles });
-      f.position.set(cfg.lx - 0.028, -0.136, 0.008);
+      f.position.set(cfg.lx - 0.05, -0.15, -0.02);
       f.rotation.z = cfg.lx < 0 ? 0.3 : -0.3;
       model.add(f);
     });
-    const thumbL = buildFinger({ lens: [0.028, 0.022], r: 0.01, axis: 'z', curlAxis: 'x', angles: [-0.15, -0.15] });
-    thumbL.position.set(-0.068, -0.122, 0.005);
+    const thumbL = buildFinger({ lens: [0.028, 0.022], r: 0.0084, axis: 'z', curlAxis: 'x', angles: [-0.15, -0.15] });
+    thumbL.position.set(-0.098, -0.135, -0.02);
     thumbL.rotation.y = Math.PI + 0.2;
     model.add(thumbL);
     const armL = buildForearm();
-    armL.position.set(-0.058, -0.198, 0.0);
+    armL.position.set(-0.088, -0.215, -0.04);
     armL.rotation.x = -0.5;
-    armL.rotation.z = -0.7;
+    armL.rotation.z = -0.95;
     model.add(armL);
   } else {
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.38), body);
@@ -319,17 +313,17 @@ function buildViewModel(def) {
     palmR.rotation.x = -0.05;
     model.add(palmR);
     [
-      { z: 0.238, lens: [0.032, 0.028, 0.024], r: 0.0095, angles: [-0.6, -0.65] },
-      { z: 0.272, lens: [0.036, 0.031, 0.026], r: 0.0105, angles: [-0.72, -0.78] },
-      { z: 0.306, lens: [0.034, 0.03, 0.025], r: 0.01, angles: [-0.78, -0.83] },
-      { z: 0.338, lens: [0.027, 0.023, 0.019], r: 0.0078, angles: [-0.85, -0.9] },
+      { z: 0.232, lens: [0.032, 0.028, 0.03], r: 0.008, angles: [-0.58, -0.5] },
+      { z: 0.272, lens: [0.036, 0.031, 0.032], r: 0.0088, angles: [-0.7, -0.6] },
+      { z: 0.312, lens: [0.034, 0.03, 0.031], r: 0.0084, angles: [-0.76, -0.65] },
+      { z: 0.352, lens: [0.027, 0.023, 0.024], r: 0.0068, angles: [-0.82, -0.7] },
     ].forEach((cfg) => {
       const f = buildFinger({ lens: cfg.lens, r: cfg.r, axis: 'y', curlAxis: 'z', angles: cfg.angles });
       f.position.set(-0.055, -0.075, cfg.z);
       f.rotation.z = -0.12;
       model.add(f);
     });
-    const thumbR = buildFinger({ lens: [0.03, 0.024], r: 0.011, axis: 'z', curlAxis: 'x', angles: [-0.2, -0.2] });
+    const thumbR = buildFinger({ lens: [0.03, 0.024], r: 0.0088, axis: 'z', curlAxis: 'x', angles: [-0.2, -0.2] });
     thumbR.position.set(0.042, -0.045, 0.33);
     thumbR.rotation.y = Math.PI + 0.1;
     model.add(thumbR);
@@ -344,17 +338,17 @@ function buildViewModel(def) {
     palmL.rotation.x = 0.15;
     model.add(palmL);
     [
-      { z: -0.252, lens: [0.028, 0.024, 0.02], r: 0.0095, angles: [-0.6, -0.7] },
-      { z: -0.284, lens: [0.032, 0.027, 0.022], r: 0.0105, angles: [-0.7, -0.8] },
-      { z: -0.316, lens: [0.03, 0.026, 0.021], r: 0.01, angles: [-0.75, -0.85] },
-      { z: -0.346, lens: [0.024, 0.02, 0.016], r: 0.0078, angles: [-0.85, -0.9] },
+      { z: -0.246, lens: [0.028, 0.024, 0.026], r: 0.008, angles: [-0.62, -0.78] },
+      { z: -0.284, lens: [0.032, 0.027, 0.028], r: 0.0088, angles: [-0.72, -0.88] },
+      { z: -0.322, lens: [0.03, 0.026, 0.027], r: 0.0084, angles: [-0.77, -0.92] },
+      { z: -0.36, lens: [0.024, 0.02, 0.021], r: 0.0068, angles: [-0.86, -0.95] },
     ].forEach((cfg) => {
       const f = buildFinger({ lens: cfg.lens, r: cfg.r, axis: 'y', curlAxis: 'z', angles: cfg.angles });
       f.position.set(-0.038, -0.038, cfg.z);
       f.rotation.z = -0.1;
       model.add(f);
     });
-    const thumbL = buildFinger({ lens: [0.026, 0.02], r: 0.01, axis: 'y', curlAxis: 'z', angles: [0.6, 0.5] });
+    const thumbL = buildFinger({ lens: [0.026, 0.02], r: 0.0084, axis: 'y', curlAxis: 'z', angles: [0.6, 0.5] });
     thumbL.position.set(0.03, -0.005, -0.30);
     thumbL.rotation.z = 0.15;
     model.add(thumbL);
