@@ -47,6 +47,18 @@ import { WEAPONS } from './config.js';
 // band under the belly, and makes the 3 fold rings thicker (0.005) +
 // darker (FOLD_DARK) with radii recomputed against the new profile so
 // none can bury. Everything else v10/v11 stands.
+// Hands v13 (16 Nov, silent pass — Gito: "terus sempurnakan"): v12's
+// belly is SYMMETRIC — a swollen tube, not an anatomical forearm — and
+// the sleeve surface is flat plastic in the flat light. So v13: the
+// lathe is displaced toward the camera/palm side (+z) with a Gaussian
+// bump peaking at the belly (0.016 at y -0.19), so the muscle swells on
+// ONE side like a real flexor mass; the shadow band + fold rings are
+// displaced by the same bump so they keep hugging the surface instead
+// of burying under the muscle; and the sleeve gets a subtle canvas
+// weave texture (faint grid + 2 lengthwise seams) so it reads as cloth.
+// P9 arms angle a touch wider (less bottom-right crowding), the VK-47
+// grip arm stands a touch more upright. Fingers untouched (v9 as-is);
+// the v10 hand->wrist->forearm connection is preserved.
 const SKIN = '#f0c49c';
 const GLOVE_DARK = '#26282a';
 const GLOVE_KNUCKLE = '#55585c';
@@ -94,7 +106,34 @@ function buildViewModel(def) {
   const gloveSegLight = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_SEG_LIGHT), roughness: 0.75, metalness: 0 });
   const gloveTipLight = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_TIP_LIGHT), roughness: 0.7, metalness: 0 });
   const gloveCrease = new THREE.MeshStandardMaterial({ color: new THREE.Color(GLOVE_CREASE), roughness: 0.95 });
-  const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color(SLEEVE_TAN), roughness: 0.95, metalness: 0 });
+  // v13: subtle fabric weave on the sleeve — a low-contrast canvas
+  // texture (fine weave grid + 2 lengthwise seams) so the surface reads
+  // as cloth in flat light instead of smooth plastic. The map carries
+  // the colour (world.js pattern: material colour left white), so the
+  // overall tone stays SLEEVE_TAN. 0 draw calls, 0 tris.
+  function sleeveTexture() {
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const g = c.getContext('2d');
+    g.fillStyle = SLEEVE_TAN; g.fillRect(0, 0, 128, 128);
+    // Fine weave: faint darker grid, low alpha so it stays subtle.
+    g.strokeStyle = 'rgba(70,52,24,0.10)'; g.lineWidth = 1;
+    for (let i = 0; i <= 128; i += 8) {
+      g.beginPath(); g.moveTo(i + 0.5, 0); g.lineTo(i + 0.5, 128); g.stroke();
+      g.beginPath(); g.moveTo(0, i + 0.5); g.lineTo(128, i + 0.5); g.stroke();
+    }
+    // Two lengthwise seams (constant u = vertical lines in canvas space).
+    g.strokeStyle = 'rgba(70,52,24,0.28)'; g.lineWidth = 2;
+    for (const x of [42, 86]) {
+      g.beginPath(); g.moveTo(x + 0.5, 0); g.lineTo(x + 0.5, 128); g.stroke();
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping; tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(2, 1);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  const sleeve = new THREE.MeshStandardMaterial({ map: sleeveTexture(), roughness: 0.95, metalness: 0 });
   const strap = new THREE.MeshStandardMaterial({ color: new THREE.Color(STRAP_DARK), roughness: 0.7, metalness: 0.05 });
   // v12: fold rings + belly shadow band — clearly darker than the sleeve
   // (#43331a vs #9a8a68) so they read at idle distance in flat lighting.
@@ -222,7 +261,37 @@ function buildViewModel(def) {
       [0.036, 0.06],
     ];
     const pts = profile.map(([r, y]) => new THREE.Vector2(r * slim, y));
-    g.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 16), sleeve));
+    // v13: ASYMMETRIC muscle. The lathe is displaced toward the
+    // camera/palm side (+z) with a Gaussian bump peaking at the belly
+    // (0.016 at y -0.19), so the forearm swells on ONE side like a real
+    // flexor mass instead of a symmetric tube bulge. Weight falls off as
+    // cos^2 around the circumference (front only, zero at the back) and
+    // the bump scales with `slim`. Normals recomputed so the flat light
+    // still shades the new shape.
+    const MUSCLE_PEAK = 0.016, MUSCLE_Y = -0.19, MUSCLE_SIG = 0.085;
+    const muscleBump = (y) => MUSCLE_PEAK * slim * Math.exp(-((y - MUSCLE_Y) ** 2) / (2 * MUSCLE_SIG * MUSCLE_SIG));
+    // Pushes a geometry's vertices radially outward (xz-plane) by the
+    // muscle bump at their height (arm-space y = local y + yOff), front
+    // side only. Used for the sleeve itself (yOff 0) and for the band +
+    // rings — their base radii already sit proud, so the same
+    // displacement keeps them hugging the new surface instead of
+    // burying under the muscle (v12's buried-ring lesson).
+    const hugMuscle = (geo, yOff = 0) => {
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+        const r = Math.hypot(x, z);
+        if (r < 1e-6) continue;
+        const w = Math.max(0, z / r);
+        const d = muscleBump(y + yOff) * w * w;
+        p.setXYZ(i, x + (x / r) * d, y, z + (z / r) * d);
+      }
+      return geo;
+    };
+    const sleeveGeo = new THREE.LatheGeometry(pts, 16);
+    hugMuscle(sleeveGeo);
+    sleeveGeo.computeVertexNormals();
+    g.add(new THREE.Mesh(sleeveGeo, sleeve));
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.04, 16), cuffYellow);
     cuff.position.set(0, 0.045, 0);
     g.add(cuff);
@@ -235,17 +304,26 @@ function buildViewModel(def) {
     // local profile by ~0.002 so it never z-fights or buries. This is
     // what makes the bulge read in flat lighting — a shadow line under
     // the muscle, not just a silhouette change.
-    const shadow = new THREE.Mesh(new THREE.CylinderGeometry(0.0555 * slim, 0.0605 * slim, 0.018, 16), foldDark);
+    // v13: the band hugs the displaced muscle (hugMuscle, yOff -0.048)
+    // so its front stays proud of the muscle instead of sinking under
+    // it; open-ended — the caps are invisible inside the sleeve.
+    const shadowGeo = new THREE.CylinderGeometry(0.0555 * slim, 0.0605 * slim, 0.018, 16, 1, true);
+    hugMuscle(shadowGeo, -0.048);
+    const shadow = new THREE.Mesh(shadowGeo, foldDark);
     shadow.position.set(0, -0.048, 0);
     g.add(shadow);
     // Fabric creases: thick dark rings, radius = local profile radius +
     // 0.0015 so each sits proud of the sleeve surface. v11's rings were
     // thin (0.0032), low-contrast (#6b5a3e on #9a8a68), and one was
-    // buried inside the sleeve entirely.
+    // buried inside the sleeve entirely. v13: each ring is displaced by
+    // the same muscle bump (rotation baked into the geometry first) so
+    // it keeps wrapping the muscle instead of diving under it.
     const folds = [[-0.10, 0.0685], [-0.155, 0.0743], [-0.24, 0.0698]];
     for (const [y, r] of folds) {
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * slim, 0.005, 8, 18), foldDark);
-      ring.rotation.x = Math.PI / 2;
+      const ringGeo = new THREE.TorusGeometry(r * slim, 0.005, 8, 18);
+      ringGeo.rotateX(Math.PI / 2);
+      hugMuscle(ringGeo, y);
+      const ring = new THREE.Mesh(ringGeo, foldDark);
       ring.position.set(0, y, 0);
       g.add(ring);
     }
@@ -337,10 +415,13 @@ function buildViewModel(def) {
     // the bottom edge — Top 3 attachment (long limb, no mid-frame stub).
     // v11: slimmed (0.88x) + angled wider (z 0.22 -> 0.30) so the P9
     // forearms frame the weapon instead of crowding the bottom-right.
+    // v13: angled a touch wider still (z 0.30 -> 0.38) so the P9
+    // forearms crowd the bottom-right even less. Rotation is about the
+    // wrist point, so the hand->wrist->forearm connection never moves.
     const armR = buildForearm({ slim: 0.88 });
     armR.position.set(0.016, -0.195, 0.164);
     armR.rotation.x = -0.35;
-    armR.rotation.z = 0.30;
+    armR.rotation.z = 0.38;
     model.add(armR);
     // Left support hand v8 (occlusion fix): moved DOWN-LEFT-FORWARD of the
     // grip (palm under the slide, clear of the right hand's silhouette) so
@@ -373,10 +454,11 @@ function buildViewModel(def) {
     // sideways as a floating stick) — diagonal from the bottom-left corner,
     // wrist on the palm heel, sleeve off the bottom edge.
     // v11: slimmed (0.88x) + angled wider (z -0.45 -> -0.55), same reason.
+    // v13: angled a touch wider still (z -0.55 -> -0.62), same reason.
     const armL = buildForearm({ slim: 0.88 });
     armL.position.set(-0.111, -0.28, 0.022);
     armL.rotation.x = -0.35;
-    armL.rotation.z = -0.55;
+    armL.rotation.z = -0.62;
     model.add(armL);
   } else {
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.38), body);
@@ -446,10 +528,12 @@ function buildViewModel(def) {
     // v11: stood more upright (z 0.15 -> 0.06) + nudged toward center so
     // more of the grip-hand forearm stays in frame instead of only the
     // cuff + wrist at the corner.
+    // v13: stood a touch more upright still (z 0.06 -> 0.02) so a little
+    // more of the grip-hand forearm stays in frame.
     const armR = buildForearm();
     armR.position.set(0.0, -0.158, 0.347);
     armR.rotation.x = -0.35;
-    armR.rotation.z = 0.06;
+    armR.rotation.z = 0.02;
     model.add(armR);
     // Left hand on the foregrip: palm under the barrel, fingers wrapping up
     // around the barrel and over the top, thumb over the top from the far side.
