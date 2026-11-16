@@ -8,6 +8,13 @@ export const PALETTE = {
   muted: '#98a0a8',
   accent: '#f0a830',
   teal: '#2ec4b6',
+  // Stage 1 (anime environment) — new keys only; existing values untouched.
+  steelblue: '#46667c',
+  wood: '#7a5a38',
+  leaf: '#4a8a3a',
+  leafDark: '#2f6a2a',
+  trunk: '#5a4030',
+  roof: '#23262b',
 };
 
 export function shade(name) {
