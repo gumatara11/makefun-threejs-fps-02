@@ -27,19 +27,18 @@ import { WEAPONS } from './config.js';
 // band across the dark grip. Fingers are also bigger (+~30% radius) with
 // wider gaps and thicker crease rings, so the separation reads in the
 // regular idle view, not only in reload close-ups.
-// Hands v10 (16 Nov, after Gito's "ikutin aja top 3" + "tangannya masih
-// mengambang"): v9 fixed the fingers but the HAND still floats. Diagnosis:
-// the wrist sat BEHIND the palm box (invisible from the camera) and the
-// sleeve was a short thin stub ending mid-frame, emerging offset behind
-// the palm's bottom edge — a visible seam. All three Top 3 solve it the
-// same way: Kilnyard hides the hand inside a huge weapon; Lantern Rock's
-// sleeve is as wide as its hand and runs straight off the bottom edge with
-// zero gap; CAMPANILE runs a long tan forearm diagonally from hand to
-// frame edge with a yellow cuff marking the wrist. So v10: sleeve LONG
-// (runs off the bottom edge — FOV 74 puts the edge at model y ≈ -0.40)
-// and THICK (top as wide as the palm, no neck-down at the wrist), wrist
-// BIGGER and nudged toward the camera so it bulges out of the palm's back
-// face, cuff WIDER as the visible bridge. Fingers untouched (v9 as-is).
+// Hands v11 (16 Nov, after Gito's "perbaiki lagi sampai sempurna"): v10
+// fixed the float but the forearms read as smooth PIPES and the wrist
+// ball reads as a robot sphere joint. CAMPANILE's forearm (and Lantern
+// Rock's) works because the sleeve has SHAPE: it tapers from a narrow
+// wrist, swells at the forearm muscle, and carries visible fold creases.
+// So v11: the sleeve becomes a lathe profile (wrist narrow -> waist ->
+// muscle belly -> elbow), 3 darker fold rings break the surface, and the
+// wrist ball is flattened + tucked under the cuff so only a skin sliver
+// shows. P9 arms are slimmed (0.88x) + angled wider so they frame the
+// weapon instead of crowding the bottom-right; the VK-47 grip-hand arm
+// is stood more upright so more of it stays in frame. Fingers untouched
+// (v9 as-is); the v10 hand->wrist->forearm connection is preserved.
 const SKIN = '#f0c49c';
 const GLOVE_DARK = '#26282a';
 const GLOVE_KNUCKLE = '#55585c';
@@ -173,6 +172,11 @@ function buildViewModel(def) {
     }
     return g;
   }
+  // Forearm v11 (Gito: "perbaiki lagi sampai sempurna"): v10 fixed the
+  // float but the sleeve was a smooth pipe and the wrist a visible ball.
+  // Now a lathe profile (taper + muscle belly) with 3 darker fold rings,
+  // and the wrist flattened + tucked under the cuff. `slim` narrows the
+  // profile for the P9 arms. Fingers untouched (v9 as-is).
   // Forearm v10 (Top 3 attachment: Kilnyard / Lantern Rock / CAMPANILE):
   // sleeve LONG + THICK — it spans from the wrist down past the bottom
   // frame edge (FOV 74: edge at model y ≈ -0.40), never ends as a
@@ -182,11 +186,24 @@ function buildViewModel(def) {
   // hiding behind it — v9's wrist sat behind the palm box, invisible, and
   // the sleeve emerged offset behind the palm's bottom edge: the floating
   // seam. Cuff wider (0.04) as the bright bridge band.
-  function buildForearm() {
+  function buildForearm({ slim = 1 } = {}) {
     const g = new THREE.Group();
-    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(0.042, 0.062, 0.34, 16), sleeve);
-    cyl.position.set(0, -0.14, 0);
-    g.add(cyl);
+    // Lathe profile (radius, y), elbow end -> wrist end: narrow at the
+    // wrist, a slight waist just below the cuff, a muscle belly swelling
+    // mid-forearm, gentle taper to the elbow — an arm silhouette, not a
+    // straight cone (v10's pipe).
+    const profile = [
+      [0.066, -0.31],
+      [0.064, -0.26],
+      [0.060, -0.20],
+      [0.056, -0.14],
+      [0.048, -0.07],
+      [0.040, -0.02],
+      [0.037, 0.03],
+      [0.036, 0.06],
+    ];
+    const pts = profile.map(([r, y]) => new THREE.Vector2(r * slim, y));
+    g.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 16), sleeve));
     const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.046, 0.046, 0.04, 16), cuffYellow);
     cuff.position.set(0, 0.045, 0);
     g.add(cuff);
@@ -194,14 +211,24 @@ function buildViewModel(def) {
     band.rotation.x = Math.PI / 2;
     band.position.set(0, 0.026, 0);
     g.add(band);
-    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.038, 12, 10), skin);
-    wrist.scale.set(1, 0.6, 1);
-    wrist.position.set(0, 0.075, 0.012);
+    // Fabric creases: darker strap rings at staggered heights, radius =
+    // local profile radius + 0.001 so each ring sits on the sleeve
+    // surface. The lowest one is the elbow fold.
+    const folds = [[-0.06, 0.049], [-0.15, 0.057], [-0.24, 0.063]];
+    for (const [y, r] of folds) {
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(r * slim, 0.0032, 8, 18), strap);
+      ring.rotation.x = Math.PI / 2;
+      ring.position.set(0, y, 0);
+      g.add(ring);
+    }
+    // Wrist v11: flattened pad (not a ball), tucked under the cuff — its
+    // top peeks ~0.006 above the cuff as a skin sliver, the bulk hidden
+    // inside the cuff cylinder. Glove -> skin sliver -> cuff -> sleeve
+    // reads without an obvious sphere joint.
+    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), skin);
+    wrist.scale.set(1.05, 0.42, 0.85);
+    wrist.position.set(0, 0.058, 0.004);
     g.add(wrist);
-    const fold = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.0035, 8, 14), sleeve);
-    fold.rotation.x = Math.PI / 2;
-    fold.position.set(0, -0.02, 0);
-    g.add(fold);
     return g;
   }
   const model = new THREE.Group();
@@ -280,10 +307,12 @@ function buildViewModel(def) {
     // v10: wrist lands on the palm heel (visible, camera-side) and the
     // sleeve drifts down-RIGHT, clear of the magazine path, running off
     // the bottom edge — Top 3 attachment (long limb, no mid-frame stub).
-    const armR = buildForearm();
+    // v11: slimmed (0.88x) + angled wider (z 0.22 -> 0.30) so the P9
+    // forearms frame the weapon instead of crowding the bottom-right.
+    const armR = buildForearm({ slim: 0.88 });
     armR.position.set(0.016, -0.195, 0.164);
     armR.rotation.x = -0.35;
-    armR.rotation.z = 0.22;
+    armR.rotation.z = 0.30;
     model.add(armR);
     // Left support hand v8 (occlusion fix): moved DOWN-LEFT-FORWARD of the
     // grip (palm under the slide, clear of the right hand's silhouette) so
@@ -315,10 +344,11 @@ function buildViewModel(def) {
     // v10: forearm no longer near-horizontal (v9's -0.95 z-rotation ran it
     // sideways as a floating stick) — diagonal from the bottom-left corner,
     // wrist on the palm heel, sleeve off the bottom edge.
-    const armL = buildForearm();
+    // v11: slimmed (0.88x) + angled wider (z -0.45 -> -0.55), same reason.
+    const armL = buildForearm({ slim: 0.88 });
     armL.position.set(-0.111, -0.28, 0.022);
     armL.rotation.x = -0.35;
-    armL.rotation.z = -0.45;
+    armL.rotation.z = -0.55;
     model.add(armL);
   } else {
     const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.38), body);
@@ -385,10 +415,13 @@ function buildViewModel(def) {
     // v10: wrist on the palm heel (camera-side), sleeve down-RIGHT off the
     // bottom edge; less tilt-back (-0.35) so the sleeve stays in front of
     // the palm plane instead of hiding behind it.
+    // v11: stood more upright (z 0.15 -> 0.06) + nudged toward center so
+    // more of the grip-hand forearm stays in frame instead of only the
+    // cuff + wrist at the corner.
     const armR = buildForearm();
-    armR.position.set(0.011, -0.164, 0.347);
+    armR.position.set(0.0, -0.158, 0.347);
     armR.rotation.x = -0.35;
-    armR.rotation.z = 0.15;
+    armR.rotation.z = 0.06;
     model.add(armR);
     // Left hand on the foregrip: palm under the barrel, fingers wrapping up
     // around the barrel and over the top, thumb over the top from the far side.
