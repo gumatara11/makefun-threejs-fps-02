@@ -59,8 +59,9 @@ function buildViewModel(def) {
   const glovePad = new THREE.MeshStandardMaterial({ color: new THREE.Color('#9a9e90'), roughness: 0.55, metalness: 0.05 });
   const gloveTip = new THREE.MeshStandardMaterial({ color: new THREE.Color('#3f423c'), roughness: 0.8, metalness: 0.05 });
   const crease = new THREE.MeshStandardMaterial({ color: new THREE.Color('#1c1e20'), roughness: 0.95 });
-  const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color('#5c6068'), roughness: 0.95, metalness: 0 });
+  const sleeve = new THREE.MeshStandardMaterial({ color: new THREE.Color('#6e7278'), roughness: 0.95, metalness: 0 });
   const strap = new THREE.MeshStandardMaterial({ color: new THREE.Color('#a89a7a'), roughness: 0.7, metalness: 0.05 });
+  const steel = new THREE.MeshStandardMaterial({ color: new THREE.Color('#7e838b'), roughness: 0.4, metalness: 0.4 });
   // Articulated finger: capsule phalanges chained on joint pivots. Segments
   // extend along `axis` ('y' = up, 'z' = forward); each joint rotates about
   // `curlAxis` by angles[i], curling the finger around the grip. A knuckle
@@ -129,24 +130,25 @@ function buildViewModel(def) {
     }
     return g;
   }
+  // Forearm v6.1: flared cuff (wider at the elbow than the wrist) and splayed
+  // outward, so the short stubs read as sleeves exiting the frame, not twin
+  // pipes. The wrist still tucks into the palm.
   function buildForearm() {
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.038, 0.22, 12), sleeve));
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.03, 12), strap);
-    cuff.position.set(0, 0.09, 0);
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.05, 0.11, 16), sleeve));
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.025, 16), strap);
+    cuff.position.set(0, 0.045, 0);
     g.add(cuff);
-    // Rounded wrist at the top so the arm never reads as a cut pipe.
-    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 10), glovePad);
-    wrist.scale.set(1, 0.55, 1);
-    wrist.position.set(0, 0.11, 0);
+    // Rounded wrist at the top so the arm never reads as a cut pipe. Glove
+    // colour, not pale: the old pale cap read as a tube end.
+    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.03, 12, 10), glove);
+    wrist.scale.set(1, 0.6, 1);
+    wrist.position.set(0, 0.065, 0);
     g.add(wrist);
-    // Sleeve folds: two raised rings so the arm reads as fabric, not a stick.
-    [[-0.03, 0.034], [-0.075, 0.037]].forEach(([fy, fr]) => {
-      const fold = new THREE.Mesh(new THREE.TorusGeometry(fr, 0.004, 8, 14), sleeve);
-      fold.rotation.x = Math.PI / 2;
-      fold.position.set(0, fy, 0);
-      g.add(fold);
-    });
+    const fold = new THREE.Mesh(new THREE.TorusGeometry(0.04, 0.0035, 8, 14), sleeve);
+    fold.rotation.x = Math.PI / 2;
+    fold.position.set(0, -0.02, 0);
+    g.add(fold);
     return g;
   }
   const model = new THREE.Group();
@@ -159,7 +161,24 @@ function buildViewModel(def) {
     frontSight.position.set(0, 0.04, -0.1);
     const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.015, 0.012), body);
     rearSight.position.set(0, 0.037, 0.1);
-    model.add(slide, handle, frontSight, rearSight);
+    // Trigger, steel muzzle ring, and slide serrations for definition.
+    const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.035, 0.018), body);
+    trigger.position.set(0, -0.055, 0.045);
+    const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.062, 0.02), steel);
+    muzzle.position.set(0, 0, -0.125);
+    model.add(slide, handle, frontSight, rearSight, trigger, muzzle);
+    for (let i = 0; i < 3; i++) {
+      const rib = new THREE.Mesh(new THREE.BoxGeometry(0.066, 0.025, 0.008), body);
+      rib.position.set(0, 0.005, 0.075 + i * 0.014);
+      model.add(rib);
+      // Side serrations: vertical ribs on both slide flanks, so the slide
+      // reads as a pistol slide from the side, not a plain bar.
+      for (const sx of [-0.032, 0.032]) {
+        const side = new THREE.Mesh(new THREE.BoxGeometry(0.006, 0.03, 0.008), body);
+        side.position.set(sx, 0.005, 0.075 + i * 0.014);
+        model.add(side);
+      }
+    }
     // Right hand: palm behind the grip; four fingers wrap the grip around
     // its camera-side edge and across the front, thumb along the frame.
     const palmR = buildPalm(0.102, 0.112);
@@ -184,14 +203,16 @@ function buildViewModel(def) {
     thumbR.rotation.y = Math.PI + 0.15;
     model.add(thumbR);
     const armR = buildForearm();
-    armR.position.set(0.01, -0.2, 0.22);
-    armR.rotation.x = 0.38;
+    armR.position.set(0.01, -0.15, 0.155);
+    armR.rotation.x = -0.55;
+    armR.rotation.z = -0.12;
     model.add(armR);
     // Left support hand: palm cupped under the grip, shifted forward; its
     // fingers rise along the front of the grip, outer fingers fanned so they
     // read past the grip silhouette; forearm angles down-left (V shape).
+    // Raised vs v5 so the support hand reads in frame, not below it.
     const palmL = buildPalm(0.106, 0.096);
-    palmL.position.set(-0.02, -0.172, -0.005);
+    palmL.position.set(-0.015, -0.15, 0.02);
     palmL.rotation.x = 0.35;
     palmL.rotation.z = 0.12;
     model.add(palmL);
@@ -202,28 +223,40 @@ function buildViewModel(def) {
       { lx: 0.042, lens: [0.022, 0.018, 0.013], r: 0.0085, angles: [0.25, 0.35] },
     ].forEach((cfg) => {
       const f = buildFinger({ lens: cfg.lens, r: cfg.r, axis: 'y', curlAxis: 'x', angles: cfg.angles });
-      f.position.set(cfg.lx, -0.15, 0.008);
+      f.position.set(cfg.lx, -0.128, 0.033);
       f.rotation.z = cfg.lx < 0 ? 0.3 : -0.3;
       model.add(f);
     });
     const thumbL = buildFinger({ lens: [0.028, 0.022], r: 0.011, axis: 'z', curlAxis: 'x', angles: [-0.15, -0.15] });
-    thumbL.position.set(-0.04, -0.135, 0.005);
+    thumbL.position.set(-0.04, -0.115, 0.03);
     thumbL.rotation.y = Math.PI + 0.2;
     model.add(thumbL);
     const armL = buildForearm();
-    armL.position.set(-0.085, -0.225, 0.08);
-    armL.rotation.x = 0.38;
-    armL.rotation.z = 0.45;
+    armL.position.set(-0.03, -0.2, 0.03);
+    armL.rotation.x = -0.5;
+    armL.rotation.z = -0.6;
     model.add(armL);
   } else {
-    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.1, 0.42), body);
+    const receiver = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.09, 0.38), body);
     const barrel = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.045, 0.4), grip);
     barrel.position.set(0, 0.025, -0.38);
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.08, 0.22), grip);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 0.2), grip);
     stock.position.set(0, -0.02, 0.3);
-    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.14, 0.09), grip);
-    mag.position.set(0, -0.1, -0.05);
-    mag.rotation.x = 0.2;
+    // Bigger, angled magazine with a steel base plate, so the rifle stops
+    // reading as one plain slab.
+    const mag = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.16, 0.1), grip);
+    mag.position.set(0, -0.11, -0.05);
+    mag.rotation.x = 0.25;
+    const magBase = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.02, 0.105), grip);
+    magBase.position.set(0, -0.19, -0.03);
+    magBase.rotation.x = 0.25;
+    // Handguard under the barrel, steel muzzle, charging handle.
+    const handguard = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.06, 0.24), grip);
+    handguard.position.set(0, 0.0, -0.28);
+    const muzzle = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.07), steel);
+    muzzle.position.set(0, 0.025, -0.6);
+    const charging = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 0.06), steel);
+    charging.position.set(0.055, 0.02, 0.05);
     // Iron sights + trigger, so the rifle stops reading as plain boxes.
     const rearSight = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.02, 0.02), body);
     rearSight.position.set(0, 0.06, 0.18);
@@ -231,7 +264,7 @@ function buildViewModel(def) {
     frontSight.position.set(0, 0.06, -0.55);
     const trigger = new THREE.Mesh(new THREE.BoxGeometry(0.012, 0.04, 0.02), body);
     trigger.position.set(0, -0.065, 0.08);
-    model.add(receiver, barrel, stock, mag, rearSight, frontSight, trigger);
+    model.add(receiver, barrel, stock, mag, magBase, handguard, muzzle, charging, rearSight, frontSight, trigger);
     // Right hand on the stock grip: palm below the stock, fingers wrapping
     // up around its camera-side edge and over the top, thumb on the far side.
     const palmR = buildPalm(0.108, 0.118);
@@ -254,8 +287,8 @@ function buildViewModel(def) {
     thumbR.rotation.y = Math.PI + 0.1;
     model.add(thumbR);
     const armR = buildForearm();
-    armR.position.set(0.01, -0.14, 0.45);
-    armR.rotation.x = 0.38;
+    armR.position.set(0.01, -0.115, 0.325);
+    armR.rotation.x = -0.55;
     model.add(armR);
     // Left hand on the foregrip: palm under the barrel, fingers wrapping up
     // around the barrel and over the top, thumb over the top from the far side.
@@ -279,12 +312,12 @@ function buildViewModel(def) {
     thumbL.rotation.z = 0.15;
     model.add(thumbL);
     const armL = buildForearm();
-    armL.position.set(-0.055, -0.125, -0.13);
-    armL.rotation.x = 0.38;
-    armL.rotation.z = 0.2;
+    armL.position.set(-0.03, -0.095, -0.285);
+    armL.rotation.x = -0.5;
+    armL.rotation.z = -0.25;
     model.add(armL);
   }
-  model.position.set(0.28, -0.25, -0.68);
+  model.position.set(0.29, -0.27, -0.68);
   model.scale.setScalar(0.62);
   mergeStaticByMaterial(model);
   return model;

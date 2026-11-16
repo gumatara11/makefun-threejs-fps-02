@@ -78,6 +78,29 @@ export function createAudio() {
     dryFire() {
       playTone(300, 0.03, 0.12, 'square');
     },
+    // Footstep: a short low thud. Alternate pitch slightly so repeated steps
+    // do not sound like a machine. Gain follows speed (crouch = quiet).
+    step(fast = false, alternate = false) {
+      if (!context) return;
+      playNoise(0.06, fast ? 700 : 420, fast ? 0.14 : 0.09);
+      playTone(alternate ? 95 : 80, 0.05, 0.08, 'sine');
+    },
+    // Grenade throw: pin click, then a short whoosh as it leaves the hand.
+    throwFrag() {
+      playTone(1200, 0.03, 0.15, 'square');
+      if (!context) return;
+      const source = context.createBufferSource();
+      source.buffer = noiseBuffer(0.25);
+      const filter = context.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(400, context.currentTime);
+      filter.frequency.exponentialRampToValueAtTime(2400, context.currentTime + 0.22);
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.25, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.25);
+      source.connect(filter).connect(gain).connect(master);
+      source.start(context.currentTime);
+    },
     plantTick() {
       playTone(880, 0.05, 0.15, 'sine');
     },

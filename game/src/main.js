@@ -78,6 +78,12 @@ let lastWeapon = 'P9';
 let prevFiring = false;
 let autoFiring = false;
 let autoHoldingE = false;
+// Footstep + dry-fire + plant-tick state (audio only, no gameplay).
+let stepDistance = 0;
+let stepAlternate = false;
+let lastDryFire = 0;
+let lastPlantQuarter = 0;
+let lastDefuseQuarter = 0;
 let lastBeep = -10;
 let benchDone = false;
 const simSamples = [];
@@ -262,9 +268,19 @@ const G = {
   },
   onPlantProgress(fraction) {
     hud.setProgress('Planting…', fraction);
+    if (rounds.state.plant && rounds.state.plant.actor === playerActor) {
+      const q = Math.floor(fraction * 4);
+      if (fraction === 0) lastPlantQuarter = 0;
+      else if (q > lastPlantQuarter) { lastPlantQuarter = q; audio.plantTick(); }
+    }
   },
   onDefuseProgress(fraction) {
     hud.setProgress('Defusing…', fraction);
+    if (rounds.state.defuse && rounds.state.defuse.actor === playerActor) {
+      const q = Math.floor(fraction * 4);
+      if (fraction === 0) lastDefuseQuarter = 0;
+      else if (q > lastDefuseQuarter) { lastDefuseQuarter = q; audio.plantTick(); }
+    }
   },
   onBuy(actor, item) {
     if (actor !== playerActor) return;
@@ -574,6 +590,20 @@ function tick(dt) {
   if (playerActor.alive && !AUTO) player.step(dt, keys);
   weapons.step(dt);
 
+  // Footsteps: every ~2.1 m the player travels on the ground, a soft thud.
+  // Distance-based, so the cadence follows speed and crouching is quieter.
+  if (playerActor.alive && player.state.onGround) {
+    const speed = player.groundSpeed();
+    if (speed > 1) {
+      stepDistance += speed * dt;
+      if (stepDistance >= 2.1) {
+        stepDistance = 0;
+        stepAlternate = !stepAlternate;
+        audio.step(speed > 4, stepAlternate);
+      }
+    }
+  }
+
   const holdingE = AUTO ? autoHoldingE : keys.has('KeyE') && !buyMenuOpen;
   rounds.step(dt, { holdingE });
 
@@ -587,9 +617,17 @@ function tick(dt) {
   if (firing) {
     if (weapons.current === 'P9') {
       if (!prevFiring && weapons.ready() && weapons.takeRound()) fireOnce('P9');
+      else if (!prevFiring && !weapons.ready() && weapons.state.reloadLeft === 0 && clockTime - lastDryFire > 0.25) {
+        lastDryFire = clockTime;
+        audio.dryFire();
+      }
     } else {
       const shots = weapons.triggerHeld(dt);
       for (let i = 0; i < shots; i += 1) fireOnce('VK47');
+      if (shots === 0 && weapons.state.mag === 0 && weapons.state.reloadLeft === 0 && clockTime - lastDryFire > 0.25) {
+        lastDryFire = clockTime;
+        audio.dryFire();
+      }
     }
   } else if (selected === 'frag' && (input.state.firing || autoFiring) && !prevFiring && playerActor.frags > 0) {
     const origin = new THREE.Vector3();
@@ -598,7 +636,7 @@ function tick(dt) {
     camera.getWorldDirection(direction);
     grenades.throwFrag(playerActor, origin, direction);
     playerActor.frags -= 1;
-    audio.click();
+    audio.throwFrag();
     selected = 'weapon';
     weapons.switchTo(lastWeapon);
   }
@@ -693,7 +731,20 @@ function setupShot(name) {
   }
   rounds.startMatch();
   matchStarted = true;
-  if (name === 'play') {
+  if (name === 'p9') {
+    // P9 close-up pose: same scene as 'play', pistol current, no buys.
+    const state = rounds.state;
+    state.number = 2;
+    state.scoreA = 1;
+    state.scoreD = 0;
+    state.phase = 'live';
+    state.timeLeft = 60;
+    player.teleport(-4, 0, -Math.PI / 2);
+    const d3 = bots.list.find((b) => b.id === 'D3');
+    d3.body.position.set(6, 0, 0);
+    d3.yaw = Math.PI / 2;
+    for (let i = 0; i < 30; i += 1) tick(1 / 60);
+  } else if (name === 'play') {
     playerActor.money = 5000;
     rounds.buy(playerActor, 'VK47');
     rounds.buy(playerActor, 'FRAG');

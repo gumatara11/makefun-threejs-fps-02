@@ -19,21 +19,23 @@ export function createBots(scene, world, G) {
   const bots = [];
   let perceiveIndex = 0;
 
-  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x23272e, roughness: 0.6, metalness: 0.05 });
-  const legMaterial = new THREE.MeshStandardMaterial({ color: 0x1a1d22, roughness: 0.8, metalness: 0.05 });
+  // Bots read as black monoliths at range; lighten the body so they read as
+  // figures, and widen the team stripe so the team reads at a glance.
+  const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0x363b44, roughness: 0.6, metalness: 0.05 });
+  const legMaterial = new THREE.MeshStandardMaterial({ color: 0x252932, roughness: 0.8, metalness: 0.05 });
 
   function buildBodyMesh(bot) {
     const group = new THREE.Group();
     const teamColor = bot.team === 'attackers' ? TEAM.attackers.marker : TEAM.defenders.marker;
     const visorColor = bot.team === 'attackers' ? TEAM.attackers.visor : TEAM.defenders.visor;
-    const stripeMaterial = new THREE.MeshStandardMaterial({ color: teamColor, emissive: teamColor, emissiveIntensity: 0.9, roughness: 0.5 });
+    const stripeMaterial = new THREE.MeshStandardMaterial({ color: teamColor, emissive: teamColor, emissiveIntensity: 1.4, roughness: 0.5 });
     const visorMaterial = new THREE.MeshStandardMaterial({ color: visorColor, emissive: visorColor, emissiveIntensity: 1.4, roughness: 0.4 });
 
     const legs = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.8, 0.3), legMaterial);
     legs.position.y = 0.4;
     const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.3), bodyMaterial);
     torso.position.y = 1.05;
-    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.31), stripeMaterial);
+    const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.12, 0.31), stripeMaterial);
     stripe.position.y = 1.28;
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.3, 0.3), bodyMaterial);
     head.position.y = 1.62;

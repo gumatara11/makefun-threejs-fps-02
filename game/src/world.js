@@ -79,9 +79,97 @@ export function createWorld(scene) {
   box(1.2, 3.2, 1.2, -14, 1.6, -8, 'hairline');
   box(2.4, 0.9, 1.2, -2, 0.45, 6, 'hairline');
 
-  // Industrial props (owner 16 Nov 2026): barrels, wall pipes, site signs,
-  // corner crates. All placed clear of waypoints, lane edges, spawns and
-  // plant zones, so bots never get stuck and no sightline gap is blocked.
+  // Sky: a dusk gradient dome (dark zenith, warm sodium glow at the horizon),
+  // so the scene stops reading as grey boxes under a flat grey void. One
+  // draw call, unfogged.
+  function skyDome() {
+    const c = document.createElement('canvas');
+    c.width = 4; c.height = 256;
+    const x = c.getContext('2d');
+    const grad = x.createLinearGradient(0, 0, 0, 256);
+    grad.addColorStop(0, '#1c222a');
+    grad.addColorStop(0.35, '#2f3640');
+    grad.addColorStop(0.44, '#8a6a3a');
+    grad.addColorStop(0.5, '#54452e');
+    grad.addColorStop(0.62, '#33291d');
+    grad.addColorStop(1, '#241d16');
+    x.fillStyle = grad; x.fillRect(0, 0, 4, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(280, 24, 12),
+      new THREE.MeshBasicMaterial({ map: tex, side: THREE.BackSide, fog: false }),
+    );
+    scene.add(dome);
+    return dome;
+  }
+  skyDome();
+
+  // Furnace on the north wall: the foundry's heart. Dark housing, a glowing
+  // orange mouth (emissive — no new light), a chimney stack. Clear of lanes
+  // and waypoints; the housing is real cover against the wall.
+  box(4.0, 3.0, 1.2, -12, 1.5, -17.4, 'hairline');
+  box(0.8, 2.0, 0.8, -12, 4.0, -17.4, 'hairline');
+  const furnaceGlow = new THREE.Mesh(
+    new THREE.PlaneGeometry(2.2, 1.2),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(0x331505), emissive: new THREE.Color(0xff7a1f), emissiveIntensity: 2.2, roughness: 0.9 }),
+  );
+  furnaceGlow.position.set(-12, 1.2, -16.78);
+  group.add(furnaceGlow);
+  // Gantry columns at the walls: industrial verticality. The beam itself was
+  // removed — seen end-on down the mid lane it read as a giant black wedge
+  // overhead (its unlit underside). The columns stay as wall pilasters.
+  const colW = box(0.5, 4.6, 0.5, -23.5, 2.3, 0, 'hairline');
+  colW.castShadow = false;
+  const colE = box(0.5, 4.6, 0.5, 23.5, 2.3, 0, 'hairline');
+  colE.castShadow = false;
+  // Floor markings: hazard-stripe borders around both plant zones (one
+  // transparent plane each) and a faint centre line down mid lane, so the
+  // objective reads at a glance.
+  function hazardBorder(x, z) {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 256;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, 256, 256);
+    g.save();
+    g.beginPath(); g.rect(0, 0, 256, 256); g.rect(28, 28, 200, 200); g.clip('evenodd');
+    for (let i = -256; i < 512; i += 32) {
+      g.fillStyle = (Math.floor(i / 32) % 2 === 0) ? '#f0a830' : '#1c1e20';
+      g.beginPath();
+      g.moveTo(i, 0); g.lineTo(i + 32, 0); g.lineTo(i + 32 + 256, 256); g.lineTo(i + 256, 256);
+      g.closePath(); g.fill();
+    }
+    g.restore();
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    const plane = new THREE.Mesh(
+      new THREE.PlaneGeometry(8.4, 8.4),
+      new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.9, metalness: 0 }),
+    );
+    plane.rotation.x = -Math.PI / 2;
+    plane.position.set(x, 0.03, z);
+    plane.receiveShadow = true;
+    group.add(plane);
+    return plane;
+  }
+  hazardBorder(18, -9);
+  hazardBorder(18, 9);
+  const midLine = new THREE.Mesh(
+    new THREE.PlaneGeometry(48, 0.22),
+    new THREE.MeshStandardMaterial({ color: new THREE.Color(PALETTE.teal), transparent: true, opacity: 0.18, roughness: 0.9 }),
+  );
+  midLine.rotation.x = -Math.PI / 2;
+  midLine.position.set(0, 0.03, 0);
+  midLine.receiveShadow = true;
+  group.add(midLine);
+  // More barrel clusters and stacked corner crates (dead zones only: clear of
+  // waypoints, lanes, spawns and plant zones).
+  cylinder(0.45, 1.0, -13, 14.5, 'accent');
+  cylinder(0.45, 1.0, -11.9, 14.6, 'hairline');
+  cylinder(0.45, 1.0, 18, 14.5, 'accent');
+  cylinder(0.45, 1.0, 19.1, 14.6, 'hairline');
+  box(1.2, 1.1, 1.2, -20, 1.65, -15, 'surface');
+  box(1.2, 1.1, 1.2, 21, 1.65, -15, 'surface');
   function cylinder(radius, height, x, z, material, collide = true) {
     const mesh = new THREE.Mesh(new THREE.CylinderGeometry(radius, radius, height, 12), materials[material]);
     mesh.position.set(x, height / 2, z);
@@ -94,9 +182,10 @@ export function createWorld(scene) {
     }
     return mesh;
   }
-  // Barrel clusters, 3 m off their lanes.
-  cylinder(0.45, 1.0, -12, -15, 'accent');
-  cylinder(0.45, 1.0, -10.9, -15.1, 'hairline');
+  // Barrel clusters, 3 m off their lanes. (The north-west pair used to sit
+  // at (-12,-15) and blocked the furnace mouth; it moved to the corner.)
+  cylinder(0.45, 1.0, -18, -15, 'accent');
+  cylinder(0.45, 1.0, -16.9, -15.1, 'hairline');
   cylinder(0.45, 1.0, 12, 15, 'accent');
   cylinder(0.45, 1.0, 13.1, 15.2, 'hairline');
   // Corner crates.
@@ -134,9 +223,9 @@ export function createWorld(scene) {
   box(8, 0.04, 8, 18, 0.02, 9, 'accent', false);
 
   // Light: warm sodium key, cool fill, sky gradient. One shadow caster only.
-  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.ink), new THREE.Color(PALETTE.surface), 1.6);
+  const sky = new THREE.HemisphereLight(new THREE.Color(PALETTE.ink), new THREE.Color(PALETTE.surface), 1.7);
   scene.add(sky);
-  const key = new THREE.DirectionalLight(new THREE.Color(PALETTE.ink), 2.1);
+  const key = new THREE.DirectionalLight(new THREE.Color(0xf5e3b0), 2.3);
   key.position.set(14, 20, 10);
   key.target.position.set(0, 0, 0);
   key.castShadow = true;

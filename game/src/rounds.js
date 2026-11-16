@@ -115,7 +115,10 @@ export function createRounds(G) {
     if (!victim.alive || state.phase !== 'live') return false;
     const killed = G.applyDamage(victim, amount, attacker);
     if (!killed) return false;
-    if (attacker && attacker !== victim) {
+    // Kill reward only for an enemy kill: a teammate crossing the line of
+    // fire still takes damage (friendly fire is real), but killing your own
+    // team must never pay — otherwise farming a teammate is +$300 a kill.
+    if (attacker && attacker !== victim && attacker.team !== victim.team) {
       giveMoney(attacker, CONFIG.killReward);
       G.onKill(victim, attacker, weapon);
     } else {
