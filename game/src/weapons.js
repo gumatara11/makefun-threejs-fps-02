@@ -74,19 +74,26 @@ function buildViewModel(def) {
         if (axis === 'z') pivot.position.set(0, 0, lens[i - 1]);
         else pivot.position.set(0, lens[i - 1], 0);
         pivot.rotation[curlAxis] = angles[i - 1] ?? 0;
-        const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.04, 0.0016, 6, 12), crease);
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(r * 1.08, 0.0016, 6, 12), crease);
         if (axis === 'y') ring.rotation.x = Math.PI / 2;
+        ring.scale.set(1.3, 0.8, 1);
         pivot.add(ring);
       }
-      const knuckle = new THREE.Mesh(new THREE.SphereGeometry(r * 1.15, 10, 8), i === 0 ? glovePad : glove);
+      // Fingers are flattened (wide, thin), not round pills: the scale is
+      // applied in the finger's local space, so it holds for both axes.
+      const flat = axis === 'z' ? [1.3, 0.8, 1] : [1.3, 1, 0.8];
+      const knuckle = new THREE.Mesh(new THREE.SphereGeometry(r * 1.08, 10, 8), i === 0 ? glovePad : glove);
+      knuckle.scale.set(...flat);
       pivot.add(knuckle);
       const last = i === lens.length - 1;
       const seg = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 4, 10), last ? gloveTip : glove);
+      seg.scale.set(1.3, 1, 0.8);
       if (axis === 'z') { seg.rotation.x = Math.PI / 2; seg.position.set(0, 0, len / 2); }
       else seg.position.set(0, len / 2, 0);
       pivot.add(seg);
       if (last) {
         const tip = new THREE.Mesh(new THREE.SphereGeometry(r * 1.05, 10, 8), gloveTip);
+        tip.scale.set(...flat);
         if (axis === 'z') tip.position.set(0, 0, len + r * 0.5);
         else tip.position.set(0, len + r * 0.5, 0);
         pivot.add(tip);
@@ -124,15 +131,22 @@ function buildViewModel(def) {
   }
   function buildForearm() {
     const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.036, 0.24, 12), sleeve));
-    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.033, 0.033, 0.03, 12), strap);
-    cuff.position.set(0, 0.1, 0);
+    g.add(new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.038, 0.22, 12), sleeve));
+    const cuff = new THREE.Mesh(new THREE.CylinderGeometry(0.031, 0.031, 0.03, 12), strap);
+    cuff.position.set(0, 0.09, 0);
     g.add(cuff);
     // Rounded wrist at the top so the arm never reads as a cut pipe.
-    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.036, 12, 10), glovePad);
+    const wrist = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 10), glovePad);
     wrist.scale.set(1, 0.55, 1);
-    wrist.position.set(0, 0.12, 0);
+    wrist.position.set(0, 0.11, 0);
     g.add(wrist);
+    // Sleeve folds: two raised rings so the arm reads as fabric, not a stick.
+    [[-0.03, 0.034], [-0.075, 0.037]].forEach(([fy, fr]) => {
+      const fold = new THREE.Mesh(new THREE.TorusGeometry(fr, 0.004, 8, 14), sleeve);
+      fold.rotation.x = Math.PI / 2;
+      fold.position.set(0, fy, 0);
+      g.add(fold);
+    });
     return g;
   }
   const model = new THREE.Group();
